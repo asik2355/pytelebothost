@@ -122,15 +122,15 @@ export const TopBanner: React.FC<TopBannerProps> = ({
       className="sticky top-0 left-0 right-0 z-50 bg-white border-b border-slate-200/90 shadow-2xs select-none"
     >
       <div className="max-w-7xl mx-auto px-3 sm:px-5 h-11 sm:h-12 flex items-center justify-between gap-3">
-        {/* LEFT: Zero-Bot Logo & Brand */}
+        {/* LEFT: Host Bot Logo & Brand */}
         <div
           onClick={() => onNavigate("/home")}
           className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group"
-          title="Zero-Bot Home"
+          title="Host Bot Home"
         >
-          {/* Custom Zero-Bot Circular Logo */}
+          {/* Custom Host Bot Circular Logo */}
           <div className="relative w-7.5 h-7.5 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0">
-            {/* Multi-color arc rings matching screenshot */}
+            {/* Multi-color arc rings matching design */}
             <svg
               className="absolute inset-0 w-full h-full"
               viewBox="0 0 44 44"
@@ -174,15 +174,15 @@ export const TopBanner: React.FC<TopBannerProps> = ({
               </defs>
             </svg>
 
-            {/* Letter Z */}
-            <span className="relative z-10 font-bold text-xs sm:text-sm text-slate-700 tracking-tight font-sans">
-              Z
+            {/* Letter H */}
+            <span className="relative z-10 font-extrabold text-xs sm:text-sm text-indigo-600 tracking-tight font-sans">
+              H
             </span>
           </div>
 
-          {/* Zero-Bot Text */}
-          <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 font-sans group-hover:text-sky-600 transition-colors">
-            Zero-Bot
+          {/* Host Bot Text */}
+          <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 font-sans group-hover:text-indigo-600 transition-colors">
+            Host Bot
           </span>
         </div>
 

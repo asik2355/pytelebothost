@@ -151,7 +151,7 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
     if (!cleanCode) return;
 
     let amount = 50.0;
-    if (cleanCode === "ZEROBOT" || cleanCode === "CONTABO" || cleanCode === "BONUS") {
+    if (cleanCode === "HOSTBOT" || cleanCode === "ZEROBOT" || cleanCode === "CONTABO" || cleanCode === "BONUS") {
       amount = 50.0;
     } else {
       amount = 20.0;
@@ -779,7 +779,7 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. ZEROBOT or REWARD2026"
+                  placeholder="e.g. HOSTBOT or REWARD2026"
                   value={voucherCode}
                   onChange={(e) => setVoucherCode(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-mono font-bold uppercase"

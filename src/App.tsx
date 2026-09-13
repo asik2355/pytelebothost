@@ -25,7 +25,7 @@ export default function App() {
   // Persistent user notifications for plan changes, money top-ups, system events
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
-      const saved = localStorage.getItem("zerobot_notifications");
+      const saved = localStorage.getItem("hostbot_notifications") || localStorage.getItem("zerobot_notifications");
       if (saved) {
         return JSON.parse(saved);
       }
@@ -35,8 +35,8 @@ export default function App() {
     return [
       {
         id: "notif-init-1",
-        title: "Welcome to Zero-Bot",
-        titleBn: "Zero-Bot এ স্বাগতম",
+        title: "Welcome to Host Bot",
+        titleBn: "Host Bot এ স্বাগতম",
         desc: "Python 3.10 cloud sandbox is active with ৳117.50 starter balance.",
         descBn: "আপনার ক্লাউড স্যান্ডবক্স প্রস্তুত এবং ওয়ালেটে ৳১১৭.৫০ প্রারম্ভিক ব্যালেন্স যুক্ত আছে।",
         timestamp: new Date(Date.now() - 3600000).toISOString(),
@@ -49,7 +49,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem("zerobot_notifications", JSON.stringify(notifications));
+      localStorage.setItem("hostbot_notifications", JSON.stringify(notifications));
     } catch {
       // ignore
     }
@@ -494,7 +494,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
-      {/* Permanent Top Banner (Zero-Bot) */}
+      {/* Permanent Top Banner (Host Bot) */}
       <TopBanner
         lang={lang}
         setLang={setLang}

@@ -1,6 +1,7 @@
 {
-  "name": "Telegram Bot Runner",
-  "description": "Upload Python files, requirements.txt, and run Telegram bots online with live terminal logs and environment configuration.",
+  "name": "Host Bot",
+  "description": "Host Bot - Deploy and manage Python Telegram bots, high-speed servers, and 24/7 cloud hosting with live terminal logs.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
+
