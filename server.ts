@@ -780,6 +780,168 @@ app.post("/api/billing/recharge", (req, res) => {
   });
 });
 
+// ---------------- SERVERS MANAGEMENT API ----------------
+const SERVERS_FILE = path.join(WORKSPACE_DIR, ".servers.json");
+
+interface ServerRecord {
+  id: string;
+  name: string;
+  category: string;
+  region: string;
+  status: "RUNNING" | "STOPPED";
+  ramUsage: string;
+  cpuUsage: string;
+  diskUsage: string;
+  daysLeft: string;
+  planName: string;
+  planPrice: number;
+  createdAt: string;
+  isCustom?: boolean;
+}
+
+const DEFAULT_SERVERS: ServerRecord[] = [
+  {
+    id: "nova",
+    name: "Nova",
+    category: "python3",
+    region: "EU • 043a9bc6",
+    status: "RUNNING",
+    ramUsage: "142.29 MB RAM",
+    cpuUsage: "9.407% CPU",
+    diskUsage: "83.92 MB Disk",
+    daysLeft: "14d left",
+    planName: "Free Starter",
+    planPrice: 0,
+    createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
+  },
+  {
+    id: "voltx",
+    name: "Voltx",
+    category: "node.js generic",
+    region: "eu-24-3 • c67c3000",
+    status: "RUNNING",
+    ramUsage: "218.40 MB RAM",
+    cpuUsage: "4.120% CPU",
+    diskUsage: "120.50 MB Disk",
+    daysLeft: "24d left",
+    planName: "Mini-v1",
+    planPrice: 100,
+    createdAt: new Date(Date.now() - 6 * 86400000).toISOString(),
+  },
+];
+
+function getServersData(): ServerRecord[] {
+  try {
+    if (fs.existsSync(SERVERS_FILE)) {
+      const data = fs.readFileSync(SERVERS_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return DEFAULT_SERVERS;
+}
+
+function saveServersData(servers: ServerRecord[]) {
+  try {
+    fs.writeFileSync(SERVERS_FILE, JSON.stringify(servers, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to save servers data", err);
+  }
+}
+
+app.get("/api/servers", (req, res) => {
+  res.json({ servers: getServersData() });
+});
+
+app.post("/api/servers/create", (req, res) => {
+  const { name, category, planName, price } = req.body;
+  const serverName = (name || "").trim() || "Survivor Realm";
+  const serverCategory = (category || "").trim() || "python3";
+  const numPrice = typeof price === "number" ? price : parseFloat(price) || 100;
+
+  const wallet = getWalletData();
+
+  if (numPrice > 0 && wallet.balance < numPrice) {
+    return res.status(400).json({
+      error: `Insufficient balance (Balance: ৳${wallet.balance.toFixed(2)}, Required: ৳${numPrice.toFixed(2)})`,
+      balance: wallet.balance,
+      required: numPrice,
+    });
+  }
+
+  // Deduct from wallet if paid plan
+  if (numPrice > 0) {
+    wallet.balance = Math.round((wallet.balance - numPrice) * 100) / 100;
+    wallet.transactions.unshift({
+      id: `TX-${Date.now().toString().slice(-6)}`,
+      amount: numPrice,
+      type: "charge",
+      description: `Server Plan Purchase: ${planName || "Mini-v1"} (${serverName})`,
+      date: new Date().toISOString(),
+      status: "completed",
+      method: "Wallet Balance",
+    });
+    saveWalletData(wallet);
+  }
+
+  const hexHash = Math.random().toString(16).substring(2, 10);
+  const newServer: ServerRecord = {
+    id: `srv-${Date.now()}`,
+    name: serverName,
+    category: serverCategory,
+    region: `EU • ${hexHash}`,
+    status: "RUNNING",
+    ramUsage: "78.40 MB RAM",
+    cpuUsage: "1.250% CPU",
+    diskUsage: "45.10 MB Disk",
+    daysLeft: "30d left",
+    planName: planName || "Mini-v1",
+    planPrice: numPrice,
+    createdAt: new Date().toISOString(),
+    isCustom: true,
+  };
+
+  const servers = getServersData();
+  servers.push(newServer);
+  saveServersData(servers);
+
+  addLog(
+    "system",
+    `🚀 Server Created: "${serverName}" [${serverCategory}] under plan "${planName || "Mini-v1"}". Final Price: ৳${numPrice.toFixed(2)}.`
+  );
+
+  res.json({
+    success: true,
+    server: newServer,
+    newBalance: wallet.balance,
+    message: `Server "${serverName}" created successfully!`,
+  });
+});
+
+app.post("/api/servers/action", (req, res) => {
+  const { serverId, action } = req.body;
+  const servers = getServersData();
+  const server = servers.find((s) => s.id === serverId);
+
+  if (!server) {
+    return res.status(404).json({ error: "Server not found" });
+  }
+
+  if (action === "stop") {
+    server.status = "STOPPED";
+  } else if (action === "start" || action === "restart") {
+    server.status = "RUNNING";
+  }
+
+  saveServersData(servers);
+  res.json({ success: true, server });
+});
+
+
 
 // ---------------- VITE MIDDLEWARE & SERVER BOOT ----------------
 async function startServer() {

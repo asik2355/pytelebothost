@@ -53,3 +53,22 @@ export interface AppNotification {
   planName?: string;
   link?: string;
 }
+
+export type ServerCategory = "python3" | "node.js generic" | "golang" | "Bun";
+
+export interface ActiveServer {
+  id: string;
+  name: string;
+  category: ServerCategory | string;
+  region: string;
+  status: "RUNNING" | "STOPPED";
+  ramUsage: string;
+  cpuUsage: string;
+  diskUsage: string;
+  daysLeft: string;
+  planName: string;
+  planPrice: number;
+  createdAt: string;
+  isCustom?: boolean;
+}
+

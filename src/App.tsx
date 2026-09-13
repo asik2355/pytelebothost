@@ -12,7 +12,7 @@ import { HomePageView } from "./components/HomePageView";
 import { ServicesPageView } from "./components/ServicesPageView";
 import { BillingPageView } from "./components/BillingPageView";
 import { BotStorePageView } from "./components/BotStorePageView";
-import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification } from "./types";
+import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification, ActiveServer } from "./types";
 import { AlertTriangle, Play, HelpCircle, BookOpen, Bot } from "lucide-react";
 
 export default function App() {
@@ -24,6 +24,7 @@ export default function App() {
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"workspace" | "env" | "templates">("workspace");
   const [walletBalance, setWalletBalance] = useState<number>(117.50);
+  const [servers, setServers] = useState<ActiveServer[]>([]);
 
   // Persistent user notifications for plan changes, money top-ups, system events
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -124,6 +125,28 @@ export default function App() {
     } catch {
       // ignore
     }
+  }, []);
+
+  const fetchServers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/servers");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.servers)) {
+          setServers(data.servers);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleServerCreated = useCallback((newServer: ActiveServer) => {
+    setServers((prev) => {
+      const exists = prev.some((s) => s.id === newServer.id);
+      if (exists) return prev.map((s) => (s.id === newServer.id ? newServer : s));
+      return [...prev, newServer];
+    });
   }, []);
 
   const fetchWorkspace = useCallback(async () => {
@@ -263,9 +286,13 @@ export default function App() {
   useEffect(() => {
     fetchWorkspace();
     fetchCurrentToken();
-    const interval = setInterval(fetchWorkspace, 2500);
+    fetchServers();
+    const interval = setInterval(() => {
+      fetchWorkspace();
+      fetchServers();
+    }, 3000);
     return () => clearInterval(interval);
-  }, [fetchWorkspace, fetchCurrentToken]);
+  }, [fetchWorkspace, fetchCurrentToken, fetchServers]);
 
   // Actions
   const handleStartBot = async () => {
@@ -423,6 +450,9 @@ export default function App() {
               walletBalance={walletBalance}
               onWalletUpdated={(bal) => setWalletBalance(bal)}
               onAddNotification={handleAddNotification}
+              servers={servers}
+              onServerCreated={handleServerCreated}
+              onRefreshServers={fetchServers}
             />
 
             {/* Direct Bot Runner Workspace */}
@@ -555,7 +585,10 @@ export default function App() {
           <ServicesPageView
             lang={lang}
             status={status}
+            walletBalance={walletBalance}
             onNavigate={navigateTo}
+            onWalletUpdated={(bal) => setWalletBalance(bal)}
+            onServerCreated={handleServerCreated}
             onAddNotification={handleAddNotification}
           />
         )}

@@ -21,8 +21,12 @@ import {
   Key,
   Store,
   Bot,
+  Plus,
+  Layers,
+  Sparkle,
 } from "lucide-react";
-import { WorkspaceStatus, TelegramBotProfile, AppNotification } from "../types";
+import { WorkspaceStatus, TelegramBotProfile, AppNotification, ActiveServer } from "../types";
+import { PurchasePlanModal, PlanToPurchase } from "./PurchasePlanModal";
 
 interface HomePageViewProps {
   status: WorkspaceStatus | null;
@@ -37,6 +41,9 @@ interface HomePageViewProps {
   walletBalance?: number;
   onWalletUpdated?: (newBalance: number) => void;
   onAddNotification?: (notif: AppNotification) => void;
+  servers?: ActiveServer[];
+  onServerCreated?: (server: ActiveServer) => void;
+  onRefreshServers?: () => void;
 }
 
 export const HomePageView: React.FC<HomePageViewProps> = ({
@@ -52,6 +59,9 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
   walletBalance = 117.5,
   onWalletUpdated,
   onAddNotification,
+  servers = [],
+  onServerCreated,
+  onRefreshServers,
 }) => {
   const isRunning = status?.status === "running";
 
@@ -66,7 +76,16 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
   const [rewardToast, setRewardToast] = useState<string | null>(null);
 
   // Active Server Management State
-  const [managingServer, setManagingServer] = useState<"nova" | "voltx" | null>(null);
+  const [managingServerId, setManagingServerId] = useState<string | null>(null);
+  const [serverActionLoading, setServerActionLoading] = useState<string | null>(null);
+
+  // Purchase Modal from Home
+  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [deployPlan, setDeployPlan] = useState<PlanToPurchase>({
+    id: "mini-v1",
+    name: "Mini-v1",
+    price: 100,
+  });
 
   // Handle password generation
   const handleGenPassword = () => {
@@ -337,324 +356,322 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
             <Activity className="w-5 h-5 text-slate-800 stroke-[2]" />
             <h2 className="text-lg sm:text-xl font-bold text-slate-900">Active Servers</h2>
           </div>
-          <button
-            onClick={() => onNavigate("/services")}
-            className="text-xs sm:text-sm font-semibold text-[#5438dc] hover:text-[#432bc4] flex items-center gap-1 cursor-pointer transition-colors"
-          >
-            <span>View All</span>
-            <span className="text-base leading-none">↗</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setDeployPlan({
+                  id: "mini-v1",
+                  name: "Mini-v1",
+                  price: 100,
+                });
+                setIsDeployModalOpen(true);
+              }}
+              className="text-xs font-bold text-white bg-[#5438dc] hover:bg-[#472ecc] active:scale-95 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Deploy Server</span>
+            </button>
+            <button
+              onClick={() => onNavigate("/services")}
+              className="text-xs sm:text-sm font-semibold text-[#5438dc] hover:text-[#432bc4] flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>View All</span>
+              <span className="text-base leading-none">↗</span>
+            </button>
+          </div>
         </div>
 
-        {/* Server 1: Nova (Main Python 3.10 Bot Server) */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4 transition-all hover:border-slate-300">
-          {/* Header Row: Nova Title & RUNNING Badge */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {/* Stacked Disk Icon in rounded gray box */}
-              <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-                <div className="w-5 h-5 flex flex-col justify-center gap-0.8">
-                  <div className="w-5 h-2 rounded-[3px] border-[1.8px] border-current flex items-center justify-end px-0.5">
-                    <div className="w-0.8 h-0.8 rounded-full bg-current" />
+        {/* Dynamic Server Cards List */}
+        {(() => {
+          const defaultServers: ActiveServer[] = [
+            {
+              id: "nova",
+              name: "Nova",
+              category: "python3",
+              region: "EU • 043a9bc6",
+              status: isRunning ? "RUNNING" : "RUNNING",
+              ramUsage: "142.29 MB RAM",
+              cpuUsage: "9.407% CPU",
+              diskUsage: "83.92 MB Disk",
+              daysLeft: "14d left",
+              planName: "Free Starter",
+              planPrice: 0,
+              createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
+            },
+            {
+              id: "voltx",
+              name: "Voltx",
+              category: "node.js generic",
+              region: "eu-24-3 • c67c3000",
+              status: "RUNNING",
+              ramUsage: "151.90 MB RAM",
+              cpuUsage: "0.356% CPU",
+              diskUsage: "102.51 MB Disk",
+              daysLeft: "17d left",
+              planName: "Mini-v1",
+              planPrice: 100,
+              createdAt: new Date(Date.now() - 6 * 86400000).toISOString(),
+            },
+          ];
+
+          const displayServers = servers && servers.length > 0 ? servers : defaultServers;
+
+          const handleServerToggle = async (srv: ActiveServer, action: "start" | "stop" | "restart") => {
+            setServerActionLoading(srv.id);
+            try {
+              if (srv.id === "nova") {
+                if (action === "stop") onStopBot();
+                else if (action === "start") onStartBot();
+                else if (action === "restart") onRestartBot?.();
+              } else {
+                await fetch("/api/servers/action", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ serverId: srv.id, action }),
+                });
+                onRefreshServers?.();
+              }
+            } catch {
+              // ignore
+            } finally {
+              setServerActionLoading(null);
+            }
+          };
+
+          return displayServers.map((srv, idx) => {
+            const isSrvManaging = managingServerId === srv.id;
+            const isSrvRunning = srv.id === "nova" ? isRunning : srv.status === "RUNNING";
+
+            // Sparkline wave paths for aesthetic variety
+            const wavePaths = [
+              "M2 24 L10 20 L20 27 L30 15 L40 22 L50 8 L60 18 L70 11 L80 19 L90 8 L98 14",
+              "M2 22 L12 26 L22 18 L32 24 L42 12 L52 20 L62 10 L72 16 L82 8 L92 14 L98 10",
+              "M2 20 L10 12 L20 25 L30 16 L40 20 L50 6 L60 15 L70 9 L80 22 L90 7 L98 12",
+              "M2 26 L12 18 L22 22 L32 14 L42 19 L52 9 L62 16 L72 12 L82 17 L92 10 L98 13",
+            ];
+            const wavePath = wavePaths[idx % wavePaths.length];
+
+            return (
+              <div
+                key={srv.id}
+                className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4 transition-all hover:border-slate-300"
+              >
+                {/* Header Row: Server Title & RUNNING Badge */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {/* Stacked Disk Icon in rounded gray box */}
+                    <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                      <div className="w-5 h-5 flex flex-col justify-center gap-0.8">
+                        <div className="w-5 h-2 rounded-[3px] border-[1.8px] border-current flex items-center justify-end px-0.5">
+                          <div className="w-0.8 h-0.8 rounded-full bg-current" />
+                        </div>
+                        <div className="w-5 h-2 rounded-[3px] border-[1.8px] border-current flex items-center justify-end px-0.5">
+                          <div className="w-0.8 h-0.8 rounded-full bg-current" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-slate-900 leading-tight">
+                          {srv.name}
+                        </h3>
+                        {srv.isCustom && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-[#5438dc] border border-indigo-200/60">
+                            Custom
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 flex-wrap">
+                        <Network className="w-3.5 h-3.5" />
+                        <span>{srv.region}</span>
+                        <span className="text-slate-300">•</span>
+                        <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-[#5438dc] font-mono text-[10px] font-bold border border-purple-200/60">
+                          {srv.category}
+                        </span>
+                        {srv.planName && (
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            ({srv.planName})
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="w-5 h-2 rounded-[3px] border-[1.8px] border-current flex items-center justify-end px-0.5">
-                    <div className="w-0.8 h-0.8 rounded-full bg-current" />
+
+                  {/* RUNNING Status Pill Badge */}
+                  <div
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold shadow-2xs border ${
+                      isSrvRunning
+                        ? "bg-[#e6f8ef] text-[#059669] border-emerald-200/90"
+                        : "bg-slate-100 text-slate-600 border-slate-200"
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isSrvRunning ? "bg-[#10b981] animate-pulse" : "bg-slate-400"
+                      }`}
+                    />
+                    <span>{isSrvRunning ? "RUNNING" : "STOPPED"}</span>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 leading-tight">Nova</h3>
-                <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
-                  <Network className="w-3.5 h-3.5" />
-                  <span>EU • 043a9bc6</span>
+                {/* Activity Wave Graph & Stats Row matching screenshot */}
+                <div className="flex items-center justify-between py-1 px-1">
+                  {/* Green Zig-Zag Sparkline Wave */}
+                  <div className="w-24 sm:w-32 h-10 flex items-center">
+                    <svg
+                      className={`w-full h-8 stroke-current fill-none ${
+                        isSrvRunning ? "text-emerald-500" : "text-slate-300"
+                      }`}
+                      viewBox="0 0 100 35"
+                    >
+                      <path
+                        d={wavePath}
+                        strokeWidth="2.4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+
+                  {/* Stats Column: Right-aligned */}
+                  <div className="text-right space-y-0.5 text-xs sm:text-[13px] text-slate-700 font-sans font-medium">
+                    <div>{srv.ramUsage || "128 MB RAM"}</div>
+                    <div>{srv.cpuUsage || "1.25% CPU"}</div>
+                    <div>{srv.diskUsage || "64 MB Disk"}</div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* RUNNING Status Pill Badge */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#e6f8ef] text-[#059669] border border-emerald-200/90 shadow-2xs">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isRunning ? "bg-[#10b981] animate-pulse" : "bg-emerald-500"
-                }`}
-              />
-              <span>RUNNING</span>
-            </div>
-          </div>
+                {/* Divider */}
+                <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
+                  {/* Left: days left */}
+                  <div className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-600 font-medium">
+                    <Hourglass className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{srv.daysLeft || "30d left"}</span>
+                  </div>
 
-          {/* Activity Wave Graph & Stats Row matching screenshot */}
-          <div className="flex items-center justify-between py-1 px-1">
-            {/* Green Zig-Zag Sparkline Wave */}
-            <div className="w-24 sm:w-32 h-10 flex items-center">
-              <svg
-                className="w-full h-8 text-emerald-500 stroke-current fill-none"
-                viewBox="0 0 100 35"
-              >
-                <path
-                  d="M2 24 L10 20 L20 27 L30 15 L40 22 L50 8 L60 18 L70 11 L80 19 L90 8 L98 14"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
+                  {/* Right: Actions */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById("bot-workspace-runner");
+                        if (el) el.scrollIntoView({ behavior: "smooth" });
+                        else onNavigate("/services");
+                      }}
+                      className="w-9 h-9 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
+                      title="Open Web Terminal / Details"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </button>
 
-            {/* Stats Column: Right-aligned */}
-            <div className="text-right space-y-0.5 text-xs sm:text-[13px] text-slate-700 font-sans font-medium">
-              <div>142.29 MB RAM</div>
-              <div>9.407% CPU</div>
-              <div>83.92 MB Disk</div>
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
-            {/* Left: 14d left */}
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-600 font-medium">
-              <Hourglass className="w-3.5 h-3.5 text-slate-400" />
-              <span>14d left</span>
-            </div>
-
-            {/* Right: Actions */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById("bot-workspace-runner");
-                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                }}
-                className="w-9 h-9 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
-                title="Open Web Terminal"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setManagingServer(managingServer === "nova" ? null : "nova")}
-                className="px-4 sm:px-5 py-2 rounded-xl bg-[#5438dc] hover:bg-[#472ecc] active:scale-95 text-white font-semibold text-xs sm:text-sm transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
-              >
-                <span>Manage</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Expandable Manage Panel for Nova Server */}
-          {managingServer === "nova" && (
-            <div className="mt-3 p-4 rounded-2xl bg-slate-50 border border-slate-200 animate-in fade-in slide-in-from-top-2 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <div className="flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-[#5438dc]" />
-                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                    Nova: Python Bot Management
-                  </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setManagingServerId(managingServerId === srv.id ? null : srv.id)
+                      }
+                      className="px-4 sm:px-5 py-2 rounded-xl bg-[#5438dc] hover:bg-[#472ecc] active:scale-95 text-white font-semibold text-xs sm:text-sm transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>Manage</span>
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setManagingServer(null)}
-                  className="text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
 
-              {/* Bot Control Actions */}
-              <div className="flex flex-wrap items-center gap-2">
-                {isRunning ? (
-                  <button
-                    disabled={isActionLoading}
-                    onClick={onStopBot}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-2xs active:scale-95 transition-all"
-                  >
-                    <Square className="w-3.5 h-3.5 fill-current" />
-                    <span>{lang === "bn" ? "বট বন্ধ করুন" : "Stop Bot"}</span>
-                  </button>
-                ) : (
-                  <button
-                    disabled={isActionLoading}
-                    onClick={onStartBot}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-2xs active:scale-95 transition-all"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>{lang === "bn" ? "বট চালু করুন (Run)" : "Run Bot"}</span>
-                  </button>
+                {/* Expandable Manage Panel for this Server */}
+                {isSrvManaging && (
+                  <div className="mt-3 p-4 rounded-2xl bg-slate-50 border border-slate-200 animate-in fade-in slide-in-from-top-2 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <div className="flex items-center gap-2">
+                        <Terminal className="w-4 h-4 text-[#5438dc]" />
+                        <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                          {srv.name} • {srv.category} Control
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setManagingServerId(null)}
+                        className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Server Control Actions */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isSrvRunning ? (
+                        <button
+                          disabled={isActionLoading || serverActionLoading === srv.id}
+                          onClick={() => handleServerToggle(srv, "stop")}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                        >
+                          <Square className="w-3.5 h-3.5 fill-current" />
+                          <span>{lang === "bn" ? "সার্ভার বন্ধ করুন" : "Stop Server"}</span>
+                        </button>
+                      ) : (
+                        <button
+                          disabled={isActionLoading || serverActionLoading === srv.id}
+                          onClick={() => handleServerToggle(srv, "start")}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>{lang === "bn" ? "সার্ভার চালু করুন" : "Start Server"}</span>
+                        </button>
+                      )}
+
+                      <button
+                        disabled={isActionLoading || serverActionLoading === srv.id}
+                        onClick={() => handleServerToggle(srv, "restart")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                      >
+                        <RotateCw className="w-3.5 h-3.5" />
+                        <span>{lang === "bn" ? "রিস্টার্ট" : "Restart"}</span>
+                      </button>
+
+                      {srv.id === "nova" && onInstallReqs && (
+                        <button
+                          disabled={isActionLoading}
+                          onClick={onInstallReqs}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                        >
+                          <span>pip install</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => onNavigate("/services")}
+                        className="ml-auto text-xs text-[#5438dc] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>{lang === "bn" ? "প্ল্যান বিস্তারিত" : "Upgrade / Plans"}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {/* Server Info snippet */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                        <span className="text-slate-400 block text-[10px]">CATEGORY / LANGUAGE</span>
+                        <span className="font-mono font-bold text-slate-800 uppercase">
+                          {srv.category}
+                        </span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                        <span className="text-slate-400 block text-[10px]">PLAN</span>
+                        <span className="font-bold text-slate-800 truncate block">
+                          {srv.planName || "Cloud Bot"}
+                        </span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 col-span-2 sm:col-span-1">
+                        <span className="text-slate-400 block text-[10px]">HEALTH</span>
+                        <span className="font-bold text-emerald-600">
+                          {isSrvRunning ? "99.98% Active" : "Suspended"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 )}
-
-                {onRestartBot && (
-                  <button
-                    disabled={isActionLoading}
-                    onClick={onRestartBot}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs active:scale-95 transition-all"
-                  >
-                    <RotateCw className="w-3.5 h-3.5" />
-                    <span>{lang === "bn" ? "রিস্টার্ট" : "Restart"}</span>
-                  </button>
-                )}
-
-                {onInstallReqs && (
-                  <button
-                    disabled={isActionLoading}
-                    onClick={onInstallReqs}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs active:scale-95 transition-all"
-                  >
-                    <span>pip install</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => {
-                    const el = document.getElementById("bot-workspace-runner");
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  className="ml-auto text-xs text-[#5438dc] hover:underline font-semibold flex items-center gap-1"
-                >
-                  <span>{lang === "bn" ? "টার্মিনাল ও ফাইলস দেখুন" : "Open Full Terminal"}</span>
-                  <ExternalLink className="w-3 h-3" />
-                </button>
               </div>
-
-              {/* Bot Info snippet */}
-              <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-xl border border-slate-200">
-                <div>
-                  <span className="text-slate-400 block text-[10px]">ENTRY FILE</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {status?.currentEntryFile || "bot.py"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">TELEGRAM BOT</span>
-                  <span className="font-bold text-slate-800 truncate block">
-                    {botProfile ? `@${botProfile.username}` : "Not configured"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Server 2: Voltx matching Screenshot 2 */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4 transition-all hover:border-slate-300">
-          {/* Header Row: Voltx Title & RUNNING Badge */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-                <div className="w-5 h-5 flex flex-col justify-center gap-0.8">
-                  <div className="w-5 h-2 rounded-[3px] border-[1.8px] border-current flex items-center justify-end px-0.5">
-                    <div className="w-0.8 h-0.8 rounded-full bg-current" />
-                  </div>
-                  <div className="w-5 h-2 rounded-[3px] border-[1.8px] border-current flex items-center justify-end px-0.5">
-                    <div className="w-0.8 h-0.8 rounded-full bg-current" />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 leading-tight">Voltx</h3>
-                <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
-                  <Network className="w-3.5 h-3.5" />
-                  <span>eu-24-3 • c67c3000</span>
-                </div>
-              </div>
-            </div>
-
-            {/* RUNNING Status Pill Badge */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#e6f8ef] text-[#059669] border border-emerald-200/90 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
-              <span>RUNNING</span>
-            </div>
-          </div>
-
-          {/* Activity Wave Graph & Stats Row matching screenshot */}
-          <div className="flex items-center justify-between py-1 px-1">
-            {/* Green Zig-Zag Sparkline Wave */}
-            <div className="w-24 sm:w-32 h-10 flex items-center">
-              <svg
-                className="w-full h-8 text-emerald-500 stroke-current fill-none"
-                viewBox="0 0 100 35"
-              >
-                <path
-                  d="M2 22 L12 26 L22 18 L32 24 L42 12 L52 20 L62 10 L72 16 L82 8 L92 14 L98 10"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-
-            {/* Stats Column: Right-aligned */}
-            <div className="text-right space-y-0.5 text-xs sm:text-[13px] text-slate-700 font-sans font-medium">
-              <div>151.90 MB RAM</div>
-              <div>0.356% CPU</div>
-              <div>102.51 MB Disk</div>
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
-            {/* Left: 17d left */}
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-600 font-medium">
-              <Hourglass className="w-3.5 h-3.5 text-slate-400" />
-              <span>17d left</span>
-            </div>
-
-            {/* Right: Actions */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onNavigate("/services")}
-                className="w-9 h-9 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
-                title="Server Details"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setManagingServer(managingServer === "voltx" ? null : "voltx")}
-                className="px-4 sm:px-5 py-2 rounded-xl bg-[#5438dc] hover:bg-[#472ecc] active:scale-95 text-white font-semibold text-xs sm:text-sm transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
-              >
-                <span>Manage</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Manage Drawer for Voltx Server */}
-          {managingServer === "voltx" && (
-            <div className="mt-3 p-4 rounded-2xl bg-slate-50 border border-slate-200 animate-in fade-in slide-in-from-top-2 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Voltx Server Details
-                </span>
-                <button
-                  onClick={() => setManagingServer(null)}
-                  className="text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-slate-400 block text-[10px]">REGION</span>
-                  <span className="font-bold text-slate-800">EU-Central (Germany)</span>
-                </div>
-                <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-slate-400 block text-[10px]">IP ADDRESS</span>
-                  <span className="font-mono font-bold text-slate-800">194.163.142.87</span>
-                </div>
-                <div className="bg-white p-2.5 rounded-xl border border-slate-200 col-span-2 sm:col-span-1">
-                  <span className="text-slate-400 block text-[10px]">UPTIME</span>
-                  <span className="font-bold text-emerald-600">99.98% Healthy</span>
-                </div>
-              </div>
-              <button
-                onClick={() => onNavigate("/services")}
-                className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold text-xs transition-colors"
-              >
-                Upgrade or Renew Server
-              </button>
-            </div>
-          )}
-        </div>
+            );
+          });
+        })()}
       </div>
 
       {/* 4. Claim Rewards Modal */}
@@ -722,6 +739,35 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* 5. Purchase Plan Modal directly from Home Deploy Server Button */}
+      {isDeployModalOpen && (
+        <PurchasePlanModal
+          plan={deployPlan}
+          walletBalance={walletBalance}
+          onClose={() => setIsDeployModalOpen(false)}
+          onSuccess={(newServer, newWalletBalance) => {
+            onWalletUpdated?.(newWalletBalance);
+            onServerCreated?.(newServer);
+            onRefreshServers?.();
+            onAddNotification?.({
+              id: `srv-${Date.now()}`,
+              title: "Server Deployed!",
+              titleBn: "সার্ভার ডিপ্লয় সফল হয়েছে!",
+              desc: `Server "${newServer.name}" (${newServer.category}) is now active.`,
+              descBn: `সার্ভার "${newServer.name}" (${newServer.category}) সফলভাবে সক্রিয় হয়েছে।`,
+              timestamp: new Date().toISOString(),
+              type: "server",
+              read: false,
+              link: "/home",
+            });
+          }}
+          onNavigateToBilling={() => {
+            setIsDeployModalOpen(false);
+            onNavigate("/billing");
+          }}
+        />
       )}
     </div>
   );

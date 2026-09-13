@@ -15,34 +15,43 @@ import {
   CreditCard,
   Layers,
 } from "lucide-react";
-import { WorkspaceStatus, AppNotification } from "../types";
+import { WorkspaceStatus, AppNotification, ActiveServer } from "../types";
+import { PurchasePlanModal, PlanToPurchase } from "./PurchasePlanModal";
 
 interface ServicesPageViewProps {
   lang: "bn" | "en";
   status: WorkspaceStatus | null;
+  walletBalance?: number;
   onNavigate: (route: string) => void;
+  onWalletUpdated?: (newBalance: number) => void;
+  onServerCreated?: (server: ActiveServer) => void;
   onAddNotification?: (notif: AppNotification) => void;
 }
 
 export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
   lang,
   status,
+  walletBalance = 117.5,
   onNavigate,
+  onWalletUpdated,
+  onServerCreated,
   onAddNotification,
 }) => {
   const isRunning = status?.status === "running";
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [selectedPlan, setSelectedPlan] = useState<string>("free");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [purchasingPlan, setPurchasingPlan] = useState<PlanToPurchase | null>(null);
 
-  // Hosting & Bot Subscription Plans moved here per user instruction:
-  // "আর billing এর প্লান গুলো হচ্ছে service menu তে থাকবে"
+  // Hosting & Bot Subscription Plans
   const hostingPlans = [
     {
       id: "free",
       name: lang === "bn" ? "ফ্রি স্টার্টার" : "Free Starter",
       priceMonthly: "৳ 0",
       priceYearly: "৳ 0",
+      numPriceMonthly: 0,
+      numPriceYearly: 0,
       period: lang === "bn" ? "আজীবন ফ্রি" : "Forever Free",
       description:
         lang === "bn"
@@ -60,10 +69,35 @@ export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
       isCurrent: true,
     },
     {
+      id: "mini-v1",
+      name: "Mini-v1",
+      priceMonthly: "৳ 100",
+      priceYearly: "৳ 1,000",
+      numPriceMonthly: 100,
+      numPriceYearly: 1000,
+      period: lang === "bn" ? "/ মাস" : "/ month",
+      description:
+        lang === "bn"
+          ? "জনপ্রিয় ক্লাউড গেম ও টেলিগ্রাম বট সার্ভার (পাইথন, নোড, গো ও বান সাপোর্ট)।"
+          : "High-speed cloud runner for 24/7 bots (Python3, Node.js, Go, Bun).",
+      features: [
+        lang === "bn" ? "১টি হাই-স্পিড ডেডিকেটেড সার্ভার" : "1 High-Speed Server Instance",
+        lang === "bn" ? "১ জিবি ডিডিআর৪ মেমোরি / ১ কোর" : "1 GB Fast RAM / 1 Core",
+        lang === "bn" ? "Python3, Node.js, Go, Bun নির্বাচন" : "Python3, Node.js, Go, Bun Runtimes",
+        lang === "bn" ? "২৪/৭ ক্লাউড অটো-রিস্টার্ট" : "24/7 Cloud Auto-restart & Uptime",
+        lang === "bn" ? "ওয়েব টার্মিনাল ও ফাইল এডিটর" : "Full Web Terminal & File Access",
+      ],
+      isPopular: true,
+      buttonText: lang === "bn" ? "Mini-v1 কিনুন" : "Get Mini-v1",
+      isCurrent: false,
+    },
+    {
       id: "pro",
       name: lang === "bn" ? "প্রো ডেভেলপার" : "Pro Developer",
-      priceMonthly: "৳ ২৯৯",
-      priceYearly: "৳ ২,৯৯০",
+      priceMonthly: "৳ 299",
+      priceYearly: "৳ 2,990",
+      numPriceMonthly: 299,
+      numPriceYearly: 2990,
       period: lang === "bn" ? "/ মাস" : "/ month",
       description:
         lang === "bn"
@@ -76,15 +110,17 @@ export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
         lang === "bn" ? "কাস্টম এনভায়রনমেন্ট সিক্রেটস" : "Unlimited Custom Secrets & Env",
         lang === "bn" ? "অগ্রাধিকার ভিত্তিক টেলিগ্রাম সাপোর্ট" : "Priority Telegram Support (1 hr SLA)",
       ],
-      isPopular: true,
+      isPopular: false,
       buttonText: lang === "bn" ? "প্রো আপগ্রেড করুন" : "Upgrade to Pro",
       isCurrent: false,
     },
     {
       id: "business",
       name: lang === "bn" ? "বিজনেস ও এজেন্সি" : "Business & Agency",
-      priceMonthly: "৳ ৭৯৯",
-      priceYearly: "৳ ৭,৯৯০",
+      priceMonthly: "৳ 799",
+      priceYearly: "৳ 7,990",
+      numPriceMonthly: 799,
+      numPriceYearly: 7990,
       period: lang === "bn" ? "/ মাস" : "/ month",
       description:
         lang === "bn"
@@ -106,34 +142,31 @@ export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
   const handleSelectPlan = (planId: string) => {
     if (planId === "free") return;
     const targetPlan = hostingPlans.find((p) => p.id === planId);
-    const planName = targetPlan ? targetPlan.name : planId.toUpperCase();
-    const planPrice = targetPlan
-      ? billingCycle === "monthly"
-        ? targetPlan.priceMonthly
-        : targetPlan.priceYearly
-      : "";
+    if (!targetPlan) return;
 
-    setSelectedPlan(planId);
+    const numPrice =
+      billingCycle === "monthly" ? targetPlan.numPriceMonthly : targetPlan.numPriceYearly;
+
+    setPurchasingPlan({
+      id: targetPlan.id,
+      name: targetPlan.name,
+      price: numPrice,
+      period: billingCycle === "monthly" ? "monthly" : "yearly",
+    });
+  };
+
+  const handlePurchaseSuccess = (newServer: ActiveServer, newBalance: number) => {
+    onWalletUpdated?.(newBalance);
+    onServerCreated?.(newServer);
     setToastMsg(
       lang === "bn"
-        ? `প্ল্যানটি (${planName}) নির্বাচন করা হয়েছে! আপনার ওয়ালেট ব্যালেন্স থেকে সাবস্ক্রিপশন সম্পন্ন করতে 'Billing' মেনু থেকে ব্যালেন্স নিশ্চিত করুন।`
-        : `Plan (${planName}) selected! Please ensure your wallet has sufficient balance in 'Billing' to complete subscription.`
+        ? `অভিনন্দন! আপনার "${newServer.name}" সার্ভার সফলভাবে সক্রিয় হয়েছে!`
+        : `Congratulations! Server "${newServer.name}" is now active and running!`
     );
-
-    onAddNotification?.({
-      id: `notif-plan-${Date.now()}`,
-      title: "Plan Subscription Selected",
-      titleBn: "হোস্টিং প্ল্যান নির্বাচিত হয়েছে",
-      desc: `You selected the "${planName}" plan (${planPrice}). Head to Billing to confirm your wallet balance.`,
-      descBn: `আপনি "${planName}" (${planPrice}) প্ল্যানটি নির্বাচন করেছেন। বিলিং মেনু থেকে ওয়ালেট ব্যালেন্স নিশ্চিত করুন।`,
-      timestamp: new Date().toISOString(),
-      type: "plan",
-      read: false,
-      planName: planName,
-      link: "/services",
-    });
-
-    setTimeout(() => setToastMsg(null), 6000);
+    // Smoothly redirect to home to show the new server in the active list
+    setTimeout(() => {
+      onNavigate("/home");
+    }, 1200);
   };
 
   const servicesList = [
@@ -459,6 +492,18 @@ export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Purchase Details Modal matching user design */}
+      <PurchasePlanModal
+        isOpen={Boolean(purchasingPlan)}
+        plan={purchasingPlan}
+        walletBalance={walletBalance}
+        lang={lang}
+        onClose={() => setPurchasingPlan(null)}
+        onSuccess={handlePurchaseSuccess}
+        onNavigate={onNavigate}
+        onAddNotification={onAddNotification}
+      />
     </div>
   );
 };
