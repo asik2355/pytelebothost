@@ -31,114 +31,96 @@ export const BotStorePageView: React.FC<BotStorePageViewProps> = ({
   const templates = [
     {
       id: "echo",
-      name: lang === "bn" ? "টেলিগ্রাম ইকো বট (Echo Bot)" : "Telegram Echo Bot",
+      name: "Telegram Echo Bot",
       category: "basic",
       badge: "Starter",
       badgeColor: "bg-sky-50 text-sky-700 border-sky-200",
-      description:
-        lang === "bn"
-          ? "সহজ ইকো বট। ইউজার যা মেসেজ পাঠাবে ঠিক সেটাই রিপ্লাই দেবে। নতুনদের জন্য আদর্শ।"
-          : "Simple echo bot that repeats whatever message the user sends. Great foundation for beginners.",
+      description: "Simple echo bot that repeats whatever message the user sends. Great foundation for beginners.",
       framework: "python-telegram-bot v20+",
       features: [
-        "/start এবং /help কমান্ড হ্যান্ডলার",
-        "টেক্সট মেসেজ রিফ্লেকশন",
-        "সহজ কনফিগারেশন",
+        "/start and /help command handlers",
+        "Instant text message reflection",
+        "Zero-configuration setup",
       ],
       author: "Official",
       downloads: "1.4k",
     },
     {
       id: "inline_buttons",
-      name: lang === "bn" ? "ইনলাইন বাটন মেনু বট" : "Inline Keyboard Menu Bot",
+      name: "Inline Keyboard Menu Bot",
       category: "interactive",
       badge: "Popular",
       badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
-      description:
-        lang === "bn"
-          ? "আকর্ষণীয় ক্লিকযোগ্য ইনলাইন বাটন এবং মেনু সহ বট। কলব্যাক কোয়েরি হ্যান্ডলিং অন্তর্ভুক্ত।"
-          : "Interactive inline buttons and navigation keyboard with instant callback query responses.",
+      description: "Interactive inline buttons and navigation keyboard with instant callback query responses.",
       framework: "python-telegram-bot v20+",
       features: [
-        "ডায়নামিক ইনলাইন কিবোর্ড",
-        "CallbackQueryHandler ইন্টিগ্রেশন",
-        "ইউজার ইন্টারফেস মেনু",
+        "Dynamic inline keyboards & buttons",
+        "CallbackQueryHandler integration",
+        "Interactive UI navigation menus",
       ],
       author: "Official",
       downloads: "2.1k",
     },
     {
       id: "telebot_simple",
-      name: lang === "bn" ? "টেলিবট লাইব্রেরি বট (PyTelegramBotAPI)" : "PyTelegramBotAPI Bot",
+      name: "PyTelegramBotAPI Bot",
       category: "basic",
       badge: "Lightweight",
       badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      description:
-        lang === "bn"
-          ? "সহজ PyTelegramBotAPI কোড কাঠামো। কম মেমোরি ব্যবহারে দ্রুত মেসেজ রিপ্লাই।"
-          : "Lightweight telebot framework code with straightforward message decorators and fast response.",
+      description: "Lightweight telebot framework code with straightforward message decorators and fast response.",
       framework: "pyTelegramBotAPI 4.14+",
       features: [
-        "@bot.message_handler ডেকোরেটর",
-        "ফটো এবং ডকুমেন্ট হ্যান্ডলিং",
-        "দ্রুত ডিপ্লয়মেন্ট",
+        "@bot.message_handler decorators",
+        "Photo and document media support",
+        "Fast response & low memory footprint",
       ],
       author: "Community",
       downloads: "980",
     },
     {
       id: "ai_assistant",
-      name: lang === "bn" ? "এআই স্মার্ট বট (AI Chat Bot)" : "AI Assistant Bot",
+      name: "AI Assistant Bot",
       category: "ai",
       badge: "AI Powered",
       badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
-      description:
-        lang === "bn"
-          ? "টেলিগ্রাম গ্রুপ বা ইনবক্সে যেকোনো প্রশ্নের উত্তর দেওয়ার মতো এআই অ্যাসিস্ট্যান্ট বট।"
-          : "Smart assistant bot template designed to integrate with AI completions and Q&A workflows.",
+      description: "Smart assistant bot template designed to integrate with AI completions and Q&A workflows.",
       framework: "python-telegram-bot + Async",
       features: [
-        "স্মার্ট প্রম্পট রেসপন্স",
-        "কনটেক্সট সংরক্ষণ",
-        "গ্রুপ চ্যাট মোড",
+        "Smart conversational prompt responses",
+        "Conversation memory & context",
+        "Group chat and direct message modes",
       ],
       author: "Telegram Labs",
       downloads: "3.2k",
     },
     {
       id: "channel_auto_post",
-      name: lang === "bn" ? "চ্যানেল অটো-পোস্টার বট" : "Channel Auto-Poster Bot",
+      name: "Channel Auto-Poster Bot",
       category: "utility",
       badge: "Utility",
       badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
-      description:
-        lang === "bn"
-          ? "নির্দিষ্ট সময়ে চ্যানেলে স্বয়ংক্রিয়ভাবে মেসেজ, ছবি এবং ঘোষণা পোস্ট করার বট।"
-          : "Scheduled publisher that automatically broadcasts posts, images, and announcements to channels.",
+      description: "Scheduled publisher that automatically broadcasts posts, images, and announcements to channels.",
       framework: "python-telegram-bot + APScheduler",
       features: [
-        "চ্যানেল ব্রডকাস্ট",
-        "টাইমার এবং শিডিউলিং",
-        "মিডিয়া ক্যাপশন সাপোর্ট",
+        "Telegram channel & group broadcast",
+        "Timers & automated scheduling",
+        "Rich text & image caption support",
       ],
       author: "Community",
       downloads: "850",
     },
     {
       id: "admin_moderator",
-      name: lang === "bn" ? "গ্রুপ মডারেটর ও অ্যান্টি-স্প্যাম" : "Group Moderator & Anti-Spam",
+      name: "Group Moderator & Anti-Spam",
       category: "utility",
       badge: "Protection",
       badgeColor: "bg-rose-50 text-rose-700 border-rose-200",
-      description:
-        lang === "bn"
-          ? "গ্রুপের নতুন মেম্বারকে স্বাগতম জানানো এবং স্প্যাম লিংক অটো-রিমুভ করার নির্ভরযোগ্য বট।"
-          : "Auto-welcome new users and automatically filter unsolicited links or spam in your Telegram groups.",
+      description: "Auto-welcome new users and automatically filter unsolicited links or spam in your Telegram groups.",
       framework: "python-telegram-bot v20+",
       features: [
-        "নতুন সদস্য ওয়েলকাম মেসেজ",
-        "লিঙ্ক ব্লকার ও স্প্যাম ফিল্টার",
-        "অ্যাডমিন মিউট/ব্যান কমান্ড",
+        "New member welcome & greeting message",
+        "Auto-remove spam links & scam defense",
+        "Admin mute, kick & ban commands",
       ],
       author: "Official",
       downloads: "1.8k",

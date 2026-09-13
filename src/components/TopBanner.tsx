@@ -22,6 +22,9 @@ import {
   Sparkles,
   Trash2,
   CheckCheck,
+  PlusCircle,
+  FileText,
+  LogOut,
 } from "lucide-react";
 import { WorkspaceStatus, AppNotification } from "../types";
 
@@ -365,64 +368,62 @@ export const TopBanner: React.FC<TopBannerProps> = ({
               <User className="w-4 h-4 text-white" />
             </button>
 
-            {/* User Profile / Wallet Popover */}
+            {/* User Profile / Wallet Popover matching user screenshot */}
             {isProfileOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2">
-                <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 text-white flex items-center justify-center font-bold text-sm">
-                    Z
-                  </div>
-                  <div className="overflow-hidden">
-                    <p className="text-xs font-bold text-slate-900 truncate">Zero-Bot User</p>
-                    <p className="text-[11px] text-slate-500 truncate">asikisbackagain@gmail.com</p>
-                  </div>
+              <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200/90 rounded-2xl shadow-xl p-4 sm:p-5 z-50 animate-in fade-in slide-in-from-top-2">
+                {/* User Header */}
+                <div className="pb-3 border-b border-slate-100">
+                  <h3 className="text-base font-bold text-slate-900 leading-tight">Alif Sheikh</h3>
+                  <p className="text-sm text-slate-500 mt-0.5 select-all font-sans">
+                    asikgamerbd@gmail.com
+                  </p>
                 </div>
 
-                {/* Wallet Balance in Profile */}
-                <div className="my-3 p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] text-slate-500 font-medium block">
-                      {lang === "bn" ? "ওয়ালেট ব্যালেন্স" : "Wallet Balance"}
-                    </span>
-                    <span className="text-base font-extrabold text-indigo-700 font-mono">
-                      ৳{walletBalance.toFixed(2)}
-                    </span>
-                  </div>
+                {/* Balance Gray Card */}
+                <div className="my-3.5 p-3.5 rounded-2xl bg-slate-50 border border-slate-100/90">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    BALANCE
+                  </span>
+                  <span className="text-2xl font-extrabold text-slate-900 font-sans tracking-tight block">
+                    ৳{walletBalance.toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Actions List */}
+                <div className="space-y-1">
                   <button
                     onClick={() => {
                       setIsProfileOpen(false);
                       onNavigate("/billing");
                     }}
-                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-lg transition-all"
+                    className="w-full text-left py-2.5 px-2 rounded-xl text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-3 text-sm font-medium cursor-pointer"
                   >
-                    {lang === "bn" ? "+ রিচার্জ" : "+ Add"}
+                    <PlusCircle className="w-5 h-5 text-slate-600 stroke-[1.8]" />
+                    <span>Add Funds</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsProfileOpen(false);
+                      onNavigate("/billing");
+                    }}
+                    className="w-full text-left py-2.5 px-2 rounded-xl text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-3 text-sm font-medium cursor-pointer"
+                  >
+                    <FileText className="w-5 h-5 text-slate-600 stroke-[1.8]" />
+                    <span>Invoices</span>
                   </button>
                 </div>
 
-                <div className="space-y-1 text-xs">
+                {/* Sign Out Row */}
+                <div className="border-t border-slate-100 mt-2.5 pt-2">
                   <button
                     onClick={() => {
                       setIsProfileOpen(false);
-                      onNavigate("/services");
                     }}
-                    className="w-full text-left py-2 px-2.5 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors flex items-center justify-between"
+                    className="w-full text-left py-2 px-2 rounded-xl text-rose-500 hover:bg-rose-50 active:scale-[0.99] transition-colors flex items-center gap-3 text-sm font-medium cursor-pointer"
                   >
-                    <span>{lang === "bn" ? "হোস্টিং প্ল্যান" : "Hosting Plans"}</span>
-                    <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-mono">
-                      Free Starter
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                      setLang(lang === "bn" ? "en" : "bn");
-                    }}
-                    className="w-full text-left py-2 px-2.5 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors flex items-center justify-between"
-                  >
-                    <span>Language / ভাষা</span>
-                    <span className="font-semibold text-sky-600">
-                      {lang === "bn" ? "বাংলা" : "English"}
-                    </span>
+                    <LogOut className="w-5 h-5 text-rose-500 stroke-[1.8]" />
+                    <span>Sign Out</span>
                   </button>
                 </div>
               </div>

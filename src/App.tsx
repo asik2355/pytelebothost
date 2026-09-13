@@ -16,7 +16,7 @@ import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification } from "./
 import { AlertTriangle, Play, HelpCircle, BookOpen, Bot } from "lucide-react";
 
 export default function App() {
-  const [lang, setLang] = useState<"bn" | "en">("bn");
+  const [lang, setLang] = useState<"bn" | "en">("en");
   const [status, setStatus] = useState<WorkspaceStatus | null>(null);
   const [logs, setLogs] = useState<BotLog[]>([]);
   const [token, setToken] = useState<string>("");
@@ -405,25 +405,9 @@ export default function App() {
         onClearNotifications={handleClearNotifications}
       />
 
-      {/* Bot Runner Status & Control Toolbar (Active on Home) */}
-      {currentRoute === "/home" && (
-        <Header
-          status={status}
-          lang={lang}
-          setLang={setLang}
-          onStart={handleStartBot}
-          onStop={handleStopBot}
-          onRestart={handleRestartBot}
-          onInstall={handleInstallReqs}
-          isActionLoading={isActionLoading}
-          walletBalance={walletBalance}
-          onNavigateToBilling={() => navigateTo("/billing")}
-        />
-      )}
-
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-5 pb-24">
-        {/* Route 1: HOME (Includes Dashboard + Direct Bot Runner & Workspace) */}
+        {/* Route 1: HOME (Dashboard & Active Servers matching user design) */}
         {currentRoute === "/home" && (
           <div className="space-y-6">
             <HomePageView
@@ -433,11 +417,16 @@ export default function App() {
               onNavigate={navigateTo}
               onStartBot={handleStartBot}
               onStopBot={handleStopBot}
+              onRestartBot={handleRestartBot}
+              onInstallReqs={handleInstallReqs}
               isActionLoading={isActionLoading}
+              walletBalance={walletBalance}
+              onWalletUpdated={(bal) => setWalletBalance(bal)}
+              onAddNotification={handleAddNotification}
             />
 
             {/* Direct Bot Runner Workspace */}
-            <div id="bot-workspace-runner" className="space-y-5 pt-2">
+            <div id="bot-workspace-runner" className="space-y-5 pt-4 border-t border-slate-200/80 mt-6">
               {/* Token Alert if not configured */}
               {!token && !status?.hasToken && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 shadow-2xs">
