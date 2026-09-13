@@ -45,6 +45,7 @@ interface HomePageViewProps {
   servers?: ActiveServer[];
   onServerCreated?: (server: ActiveServer) => void;
   onRefreshServers?: () => void;
+  onSelectServerForManage?: (server: ActiveServer) => void;
 }
 
 export const HomePageView: React.FC<HomePageViewProps> = ({
@@ -63,6 +64,7 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
   servers = [],
   onServerCreated,
   onRefreshServers,
+  onSelectServerForManage,
 }) => {
   const isRunning = status?.status === "running";
 
@@ -592,18 +594,28 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => onNavigate("/my-servers")}
+                      onClick={() => {
+                        if (onSelectServerForManage) {
+                          onSelectServerForManage(srv);
+                        } else {
+                          onNavigate("/my-servers");
+                        }
+                      }}
                       className="w-9 h-9 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
-                      title="Open Server Details in My Servers"
+                      title="Open Server Details"
                     >
                       <ExternalLink className="w-4 h-4" />
                     </button>
 
                     <button
                       type="button"
-                      onClick={() =>
-                        setManagingServerId(managingServerId === srv.id ? null : srv.id)
-                      }
+                      onClick={() => {
+                        if (onSelectServerForManage) {
+                          onSelectServerForManage(srv);
+                        } else {
+                          setManagingServerId(managingServerId === srv.id ? null : srv.id);
+                        }
+                      }}
                       className="px-4 sm:px-5 py-2 rounded-xl bg-[#5438dc] hover:bg-[#472ecc] active:scale-95 text-white font-semibold text-xs sm:text-sm transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
                     >
                       <span>Manage</span>

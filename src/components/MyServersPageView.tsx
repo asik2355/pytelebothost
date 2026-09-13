@@ -31,6 +31,7 @@ interface MyServersPageViewProps {
   walletBalance: number;
   onWalletUpdated?: (balance: number) => void;
   onServerCreated?: (server: ActiveServer) => void;
+  onSelectServerForManage?: (server: ActiveServer) => void;
 }
 
 type StatusFilter = "ALL SERVERS" | "RUNNING" | "INSTALLING" | "SUSPENDED" | "OFFLINE";
@@ -45,6 +46,7 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
   walletBalance,
   onWalletUpdated,
   onServerCreated,
+  onSelectServerForManage,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState<StatusFilter>("ALL SERVERS");
@@ -429,9 +431,13 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
                 {/* Bottom Action: Manage Server Button */}
                 <div>
                   <button
-                    onClick={() =>
-                      setManagingServerId(managingServerId === srv.id ? null : srv.id)
-                    }
+                    onClick={() => {
+                      if (onSelectServerForManage) {
+                        onSelectServerForManage(srv);
+                      } else {
+                        setManagingServerId(managingServerId === srv.id ? null : srv.id);
+                      }
+                    }}
                     className="w-full py-3 rounded-xl bg-[#5438dc] hover:bg-[#472ecc] active:scale-[0.99] text-white font-semibold text-sm shadow-2xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>Manage Server</span>

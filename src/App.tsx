@@ -6,6 +6,8 @@ import { ServicesPageView } from "./components/ServicesPageView";
 import { BillingPageView } from "./components/BillingPageView";
 import { BotStorePageView } from "./components/BotStorePageView";
 import { MyServersPageView } from "./components/MyServersPageView";
+import { ServerDetailView } from "./components/ServerDetailView";
+import { ServerControlPanelView } from "./components/ServerControlPanelView";
 import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification, ActiveServer } from "./types";
 
 export default function App() {
@@ -17,6 +19,8 @@ export default function App() {
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(117.50);
   const [servers, setServers] = useState<ActiveServer[]>([]);
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+  const [isViewingControlPanel, setIsViewingControlPanel] = useState<boolean>(false);
 
   // Persistent user notifications for plan changes, money top-ups, system events
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -82,6 +86,8 @@ export default function App() {
     else if (route === "/my-servers") normalized = "/my-servers";
     else normalized = "/home";
 
+    setSelectedServerId(null);
+    setIsViewingControlPanel(false);
     setCurrentRoute(normalized);
     try {
       if (window.location.pathname !== normalized) {
@@ -95,6 +101,8 @@ export default function App() {
   // Listen to browser popstate (back/forward navigation)
   useEffect(() => {
     const handlePopState = () => {
+      setSelectedServerId(null);
+      setIsViewingControlPanel(false);
       const path = window.location.pathname;
       if (path === "/services" || path === "/service") setCurrentRoute("/services");
       else if (path === "/billing") setCurrentRoute("/billing");
@@ -409,6 +417,81 @@ export default function App() {
 
   const isRunning = status?.status === "running";
 
+  const selectedServer = servers.find((s) => s.id === selectedServerId);
+
+  const handleSelectServerForManage = (server: ActiveServer) => {
+    setSelectedServerId(server.id);
+    setIsViewingControlPanel(false);
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleServerAction = async (serverId: string, action: "start" | "stop" | "restart") => {
+    setIsActionLoading(true);
+    try {
+      const res = await fetch("/api/servers/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serverId, action }),
+      });
+      if (res.ok) {
+        await fetchServers();
+        const s = servers.find((item) => item.id === serverId);
+        handleAddNotification({
+          id: `srv-${Date.now()}`,
+          title: `Server ${action === "start" ? "Started" : action === "stop" ? "Stopped" : "Restarted"}`,
+          titleBn: `সার্ভার ${action === "start" ? "চালু" : action === "stop" ? "বন্ধ" : "রিস্টার্ট"} করা হয়েছে`,
+          desc: `Server "${s ? s.name : serverId}" is now ${action === "stop" ? "STOPPED" : "RUNNING"}.`,
+          descBn: `সার্ভার "${s ? s.name : serverId}" এখন ${action === "stop" ? "বন্ধ" : "চলমান"} আছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleDeleteServer = async (serverId: string, serverName: string) => {
+    const confirmText =
+      lang === "bn"
+        ? `আপনি কি নিশ্চিতভাবে "${serverName}" সার্ভারটি ডিলিট করতে চান?`
+        : `Are you sure you want to permanently delete server "${serverName}"?`;
+    if (!window.confirm(confirmText)) return;
+
+    setIsActionLoading(true);
+    try {
+      const res = await fetch(`/api/servers/${serverId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await fetchServers();
+        setSelectedServerId(null);
+        setIsViewingControlPanel(false);
+        handleAddNotification({
+          id: `srv-del-${Date.now()}`,
+          title: "Server Terminated",
+          titleBn: "সার্ভার ডিলিট করা হয়েছে",
+          desc: `Server "${serverName}" has been successfully deleted.`,
+          descBn: `সার্ভার "${serverName}" সফলভাবে ডিলিট করা হয়েছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
       {/* Permanent Top Banner (Zero-Bot) */}
@@ -429,72 +512,107 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-5 pb-24">
-        {/* Route 1: HOME (Dashboard & Active Servers matching user design) */}
-        {currentRoute === "/home" && (
-          <HomePageView
-            status={status}
-            botProfile={botProfile}
-            lang={lang}
-            onNavigate={navigateTo}
-            onStartBot={handleStartBot}
-            onStopBot={handleStopBot}
-            onRestartBot={handleRestartBot}
-            onInstallReqs={handleInstallReqs}
-            isActionLoading={isActionLoading}
-            walletBalance={walletBalance}
-            onWalletUpdated={(bal) => setWalletBalance(bal)}
-            onAddNotification={handleAddNotification}
-            servers={servers}
-            onServerCreated={handleServerCreated}
-            onRefreshServers={fetchServers}
-          />
-        )}
+        {selectedServer ? (
+          isViewingControlPanel ? (
+            <ServerControlPanelView
+              server={selectedServer}
+              lang={lang}
+              onBackToDetails={() => setIsViewingControlPanel(false)}
+              onBackToServers={() => {
+                setSelectedServerId(null);
+                setIsViewingControlPanel(false);
+                navigateTo("/my-servers");
+              }}
+              onServerAction={handleServerAction}
+              onDeleteServer={handleDeleteServer}
+              onAddNotification={handleAddNotification}
+            />
+          ) : (
+            <ServerDetailView
+              server={selectedServer}
+              lang={lang}
+              onBack={() => {
+                setSelectedServerId(null);
+                setIsViewingControlPanel(false);
+              }}
+              onGoToPanel={() => setIsViewingControlPanel(true)}
+              onServerAction={handleServerAction}
+              onDeleteServer={handleDeleteServer}
+              onAddNotification={handleAddNotification}
+            />
+          )
+        ) : (
+          <>
+            {/* Route 1: HOME (Dashboard & Active Servers matching user design) */}
+            {currentRoute === "/home" && (
+              <HomePageView
+                status={status}
+                botProfile={botProfile}
+                lang={lang}
+                onNavigate={navigateTo}
+                onStartBot={handleStartBot}
+                onStopBot={handleStopBot}
+                onRestartBot={handleRestartBot}
+                onInstallReqs={handleInstallReqs}
+                isActionLoading={isActionLoading}
+                walletBalance={walletBalance}
+                onWalletUpdated={(bal) => setWalletBalance(bal)}
+                onAddNotification={handleAddNotification}
+                servers={servers}
+                onServerCreated={handleServerCreated}
+                onRefreshServers={fetchServers}
+                onSelectServerForManage={handleSelectServerForManage}
+              />
+            )}
 
-        {/* Route 2: SERVICES */}
-        {currentRoute === "/services" && (
-          <ServicesPageView
-            lang={lang}
-            status={status}
-            walletBalance={walletBalance}
-            onNavigate={navigateTo}
-            onWalletUpdated={(bal) => setWalletBalance(bal)}
-            onServerCreated={handleServerCreated}
-            onAddNotification={handleAddNotification}
-          />
-        )}
+            {/* Route 2: SERVICES */}
+            {currentRoute === "/services" && (
+              <ServicesPageView
+                lang={lang}
+                status={status}
+                walletBalance={walletBalance}
+                onNavigate={navigateTo}
+                onWalletUpdated={(bal) => setWalletBalance(bal)}
+                onServerCreated={handleServerCreated}
+                onAddNotification={handleAddNotification}
+              />
+            )}
 
-        {/* Route 3: BILLING */}
-        {currentRoute === "/billing" && (
-          <BillingPageView
-            lang={lang}
-            onNavigate={navigateTo}
-            onWalletUpdated={(balance) => setWalletBalance(balance)}
-            onAddNotification={handleAddNotification}
-          />
-        )}
+            {/* Route 3: BILLING */}
+            {currentRoute === "/billing" && (
+              <BillingPageView
+                lang={lang}
+                onNavigate={navigateTo}
+                onWalletUpdated={(balance) => setWalletBalance(balance)}
+                onAddNotification={handleAddNotification}
+              />
+            )}
 
-        {/* Route 4: BOT STORE */}
-        {currentRoute === "/bot-store" && (
-          <BotStorePageView
-            lang={lang}
-            onLoadTemplate={handleLoadTemplate}
-            onNavigate={navigateTo}
-            isLoading={isActionLoading}
-          />
-        )}
+            {/* Route 4: BOT STORE */}
+            {currentRoute === "/bot-store" && (
+              <BotStorePageView
+                lang={lang}
+                onLoadTemplate={handleLoadTemplate}
+                onNavigate={navigateTo}
+                isLoading={isActionLoading}
+              />
+            )}
 
-        {/* Route 5: MY SERVERS (matching user screenshot) */}
-        {currentRoute === "/my-servers" && (
-          <MyServersPageView
-            servers={servers}
-            lang={lang}
-            onNavigate={navigateTo}
-            onRefreshServers={fetchServers}
-            onAddNotification={handleAddNotification}
-            walletBalance={walletBalance}
-            onWalletUpdated={(bal) => setWalletBalance(bal)}
-            onServerCreated={handleServerCreated}
-          />
+            {/* Route 5: MY SERVERS (matching user screenshot) */}
+            {currentRoute === "/my-servers" && (
+              <MyServersPageView
+                servers={servers}
+                lang={lang}
+                onNavigate={navigateTo}
+                onRefreshServers={fetchServers}
+                onAddNotification={handleAddNotification}
+                walletBalance={walletBalance}
+                onWalletUpdated={(bal) => setWalletBalance(bal)}
+                onServerCreated={handleServerCreated}
+                onSelectServerForManage={handleSelectServerForManage}
+              />
+            )}
+          </>
         )}
       </main>
 
