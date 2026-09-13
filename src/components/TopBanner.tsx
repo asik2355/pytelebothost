@@ -118,15 +118,15 @@ export const TopBanner: React.FC<TopBannerProps> = ({
       id="permanent-top-banner"
       className="sticky top-0 left-0 right-0 z-50 bg-white border-b border-slate-200/90 shadow-2xs select-none"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-15 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-5 h-11 sm:h-12 flex items-center justify-between gap-3">
         {/* LEFT: Zero-Bot Logo & Brand */}
         <div
           onClick={() => onNavigate("/home")}
-          className="flex items-center gap-3 cursor-pointer group"
+          className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group"
           title="Zero-Bot Home"
         >
           {/* Custom Zero-Bot Circular Logo */}
-          <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center">
+          <div className="relative w-7.5 h-7.5 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0">
             {/* Multi-color arc rings matching screenshot */}
             <svg
               className="absolute inset-0 w-full h-full"
@@ -172,36 +172,36 @@ export const TopBanner: React.FC<TopBannerProps> = ({
             </svg>
 
             {/* Letter Z */}
-            <span className="relative z-10 font-bold text-sm sm:text-base text-slate-700 tracking-tight font-sans">
+            <span className="relative z-10 font-bold text-xs sm:text-sm text-slate-700 tracking-tight font-sans">
               Z
             </span>
           </div>
 
           {/* Zero-Bot Text */}
-          <span className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 font-sans group-hover:text-sky-600 transition-colors">
+          <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 font-sans group-hover:text-sky-600 transition-colors">
             Zero-Bot
           </span>
         </div>
 
         {/* RIGHT: Action Icons matching screenshot */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* 1. Money Logo & Current User Balance (Beside Notifications) */}
           <button
             id="banner-wallet-balance-btn"
             type="button"
             onClick={() => onNavigate("/billing")}
-            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-10 rounded-2xl border border-emerald-200/90 bg-emerald-50/80 hover:bg-emerald-100 active:scale-95 text-emerald-950 transition-all shadow-2xs cursor-pointer group"
+            className="flex items-center gap-1.5 px-2 sm:px-2.5 h-8 sm:h-8.5 rounded-xl border border-emerald-200/90 bg-emerald-50/80 hover:bg-emerald-100 active:scale-95 text-emerald-950 transition-all shadow-2xs cursor-pointer group"
             title={
               lang === "bn"
                 ? `বর্তমান ব্যালেন্স: ৳${walletBalance.toFixed(2)} (টাকা যোগ করতে ক্লিক করুন)`
                 : `Current Balance: ৳${walletBalance.toFixed(2)} (Click to recharge)`
             }
           >
-            <div className="w-6 h-6 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-2xs font-extrabold text-xs group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-2xs font-extrabold text-[11px] group-hover:scale-105 transition-transform shrink-0">
               ৳
             </div>
             <div className="flex flex-col items-start leading-none pr-0.5">
-              <span className="font-mono font-extrabold text-xs sm:text-sm text-emerald-900 tracking-tight">
+              <span className="font-mono font-bold text-xs sm:text-xs text-emerald-900 tracking-tight">
                 ৳{walletBalance.toFixed(2)}
               </span>
             </div>
@@ -218,12 +218,12 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                   onMarkAllNotificationsRead();
                 }
               }}
-              className="w-10 h-10 rounded-full hover:bg-slate-100 active:scale-95 flex items-center justify-center text-slate-700 transition-colors relative"
+              className="w-8 h-8 rounded-full hover:bg-slate-100 active:scale-95 flex items-center justify-center text-slate-700 transition-colors relative"
               title={lang === "bn" ? "নোটিফিকেশন" : "Notifications"}
             >
-              <Bell className="w-5 h-5 text-slate-700" />
+              <Bell className="w-4.5 h-4.5 text-slate-700" />
               {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 min-w-4 h-4 px-1 bg-rose-500 text-[10px] font-bold text-white rounded-full flex items-center justify-center ring-2 ring-white animate-pulse">
+                <span className="absolute top-1 right-1 min-w-3.5 h-3.5 px-0.5 bg-rose-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center ring-1.5 ring-white animate-pulse">
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
@@ -359,17 +359,17 @@ export const TopBanner: React.FC<TopBannerProps> = ({
               id="banner-avatar-btn"
               type="button"
               onClick={() => setIsProfileOpen(!isProfileOpen)}
-              className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 hover:opacity-95 active:scale-95 flex items-center justify-center text-white shadow-sm ring-2 ring-white transition-all"
+              className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 hover:opacity-95 active:scale-95 flex items-center justify-center text-white shadow-2xs ring-1.5 ring-white transition-all"
               title="User Profile & Wallet"
             >
-              <User className="w-5 h-5 text-white" />
+              <User className="w-4 h-4 text-white" />
             </button>
 
             {/* User Profile / Wallet Popover */}
             {isProfileOpen && (
               <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 text-white flex items-center justify-center font-bold">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 text-white flex items-center justify-center font-bold text-sm">
                     Z
                   </div>
                   <div className="overflow-hidden">
@@ -435,10 +435,10 @@ export const TopBanner: React.FC<TopBannerProps> = ({
               id="banner-menu-btn"
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="w-10 h-10 rounded-xl hover:bg-slate-100 active:scale-95 flex items-center justify-center text-slate-700 transition-colors"
+              className="w-8 h-8 rounded-xl hover:bg-slate-100 active:scale-95 flex items-center justify-center text-slate-700 transition-colors"
               title="Quick Menu"
             >
-              {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-6 h-6" />}
+              {isMenuOpen ? <X className="w-4.5 h-4.5" /> : <Menu className="w-5 h-5" />}
             </button>
 
             {/* Quick Slide-down Menu */}
