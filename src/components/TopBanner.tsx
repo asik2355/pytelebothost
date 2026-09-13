@@ -391,12 +391,12 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                     </p>
                   </div>
 
-                  {/* Balance Gray Card */}
-                  <div className="my-3 px-3.5 py-2.5 rounded-xl bg-slate-50/90 border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block leading-tight">
-                      BALANCE
+                  {/* Balance Gray Card - Single Line */}
+                  <div className="my-3 px-3.5 py-2.5 rounded-xl bg-slate-50/90 border border-slate-100 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      Balance
                     </span>
-                    <span className="text-lg font-bold text-slate-900 font-sans tracking-tight block mt-0.5">
+                    <span className="text-base font-extrabold text-slate-900 font-sans tracking-tight">
                       ৳{walletBalance.toFixed(2)}
                     </span>
                   </div>
