@@ -84,9 +84,9 @@ export const PurchasePlanModal: React.FC<PurchasePlanModalProps> = ({
       onAddNotification?.({
         id: `notif-srv-${Date.now()}`,
         title: "Server Deployed Successfully",
-        titleBn: "সার্ভার সক্রিয় হয়েছে",
-        desc: `"${finalName}" (${selectedCategory}) under plan ${plan.name} is now running.`,
-        descBn: `"${finalName}" (${selectedCategory}) সার্ভার সফলভাবে তৈরি ও চালু হয়েছে।`,
+        titleBn: "সার্ভার সফলভাবে তৈরি হয়েছে",
+        desc: `"${finalName}" (${selectedCategory}) under plan ${plan.name} has been deployed. You can start it from the Manage panel.`,
+        descBn: `"${finalName}" (${selectedCategory}) সার্ভার সফলভাবে তৈরি হয়েছে। Manage প্যানেল থেকে চালু করতে পারবেন।`,
         timestamp: new Date().toISOString(),
         type: "plan",
         read: false,

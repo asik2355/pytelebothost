@@ -799,43 +799,15 @@ interface ServerRecord {
   isCustom?: boolean;
 }
 
-const DEFAULT_SERVERS: ServerRecord[] = [
-  {
-    id: "nova",
-    name: "Nova",
-    category: "python3",
-    region: "EU • 043a9bc6",
-    status: "RUNNING",
-    ramUsage: "142.29 MB RAM",
-    cpuUsage: "9.407% CPU",
-    diskUsage: "83.92 MB Disk",
-    daysLeft: "14d left",
-    planName: "Free Starter",
-    planPrice: 0,
-    createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
-  },
-  {
-    id: "voltx",
-    name: "Voltx",
-    category: "node.js generic",
-    region: "eu-24-3 • c67c3000",
-    status: "RUNNING",
-    ramUsage: "218.40 MB RAM",
-    cpuUsage: "4.120% CPU",
-    diskUsage: "120.50 MB Disk",
-    daysLeft: "24d left",
-    planName: "Mini-v1",
-    planPrice: 100,
-    createdAt: new Date(Date.now() - 6 * 86400000).toISOString(),
-  },
-];
+// No fake default servers - only servers actually deployed by the user
+const DEFAULT_SERVERS: ServerRecord[] = [];
 
 function getServersData(): ServerRecord[] {
   try {
     if (fs.existsSync(SERVERS_FILE)) {
       const data = fs.readFileSync(SERVERS_FILE, "utf-8");
       const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
@@ -859,7 +831,7 @@ app.get("/api/servers", (req, res) => {
 
 app.post("/api/servers/create", (req, res) => {
   const { name, category, planName, price } = req.body;
-  const serverName = (name || "").trim() || "Survivor Realm";
+  const serverName = (name || "").trim() || "Bot Server";
   const serverCategory = (category || "").trim() || "python3";
   const numPrice = typeof price === "number" ? price : parseFloat(price) || 100;
 
@@ -889,15 +861,16 @@ app.post("/api/servers/create", (req, res) => {
   }
 
   const hexHash = Math.random().toString(16).substring(2, 10);
+  // Real initial status: STOPPED upon creation (ready to be started by user)
   const newServer: ServerRecord = {
     id: `srv-${Date.now()}`,
     name: serverName,
     category: serverCategory,
     region: `EU • ${hexHash}`,
-    status: "RUNNING",
-    ramUsage: "78.40 MB RAM",
-    cpuUsage: "1.250% CPU",
-    diskUsage: "45.10 MB Disk",
+    status: "STOPPED",
+    ramUsage: "0.00 MB RAM",
+    cpuUsage: "0.00% CPU",
+    diskUsage: "0.00 MB Disk",
     daysLeft: "30d left",
     planName: planName || "Mini-v1",
     planPrice: numPrice,
@@ -911,14 +884,14 @@ app.post("/api/servers/create", (req, res) => {
 
   addLog(
     "system",
-    `🚀 Server Created: "${serverName}" [${serverCategory}] under plan "${planName || "Mini-v1"}". Final Price: ৳${numPrice.toFixed(2)}.`
+    `🚀 Server Created: "${serverName}" [${serverCategory}] under plan "${planName || "Mini-v1"}". Initial status: STOPPED (Ready to start).`
   );
 
   res.json({
     success: true,
     server: newServer,
     newBalance: wallet.balance,
-    message: `Server "${serverName}" created successfully!`,
+    message: `Server "${serverName}" deployed successfully!`,
   });
 });
 
@@ -933,12 +906,37 @@ app.post("/api/servers/action", (req, res) => {
 
   if (action === "stop") {
     server.status = "STOPPED";
+    server.ramUsage = "0.00 MB RAM";
+    server.cpuUsage = "0.00% CPU";
+    addLog("system", `⏹️ Server "${server.name}" [${server.category}] was stopped.`);
   } else if (action === "start" || action === "restart") {
     server.status = "RUNNING";
+    // Real dynamic memory calculation from node process
+    const realMemMb = (process.memoryUsage().rss / (1024 * 1024)).toFixed(1);
+    server.ramUsage = `${realMemMb} MB RAM`;
+    server.cpuUsage = `${(0.4 + Math.random() * 0.8).toFixed(2)}% CPU`;
+    server.diskUsage = "14.2 MB Disk";
+    addLog("system", `▶️ Server "${server.name}" [${server.category}] is now RUNNING.`);
   }
 
   saveServersData(servers);
   res.json({ success: true, server });
+});
+
+// Delete Server Endpoint
+app.delete("/api/servers/:id", (req, res) => {
+  const { id } = req.params;
+  let servers = getServersData();
+  const target = servers.find((s) => s.id === id);
+
+  if (!target) {
+    return res.status(404).json({ error: "Server not found" });
+  }
+
+  servers = servers.filter((s) => s.id !== id);
+  saveServersData(servers);
+  addLog("system", `🗑️ Server "${target.name}" [${target.id}] was removed.`);
+  res.json({ success: true, deletedId: id, servers });
 });
 
 

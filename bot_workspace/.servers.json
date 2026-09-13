@@ -1,0 +1,17 @@
+[
+  {
+    "id": "srv-1789323873619",
+    "name": "Alif",
+    "category": "golang",
+    "region": "EU • 4a319b71",
+    "status": "STOPPED",
+    "ramUsage": "0.00 MB RAM",
+    "cpuUsage": "0.00% CPU",
+    "diskUsage": "0.00 MB Disk",
+    "daysLeft": "30d left",
+    "planName": "Mini-v1",
+    "planPrice": 100,
+    "createdAt": "2026-09-13T18:24:33.619Z",
+    "isCustom": true
+  }
+]

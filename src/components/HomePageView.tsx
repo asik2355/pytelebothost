@@ -24,6 +24,7 @@ import {
   Plus,
   Layers,
   Sparkle,
+  Trash2,
 } from "lucide-react";
 import { WorkspaceStatus, TelegramBotProfile, AppNotification, ActiveServer } from "../types";
 import { PurchasePlanModal, PlanToPurchase } from "./PurchasePlanModal";
@@ -383,38 +384,41 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
 
         {/* Dynamic Server Cards List */}
         {(() => {
-          const defaultServers: ActiveServer[] = [
-            {
-              id: "nova",
-              name: "Nova",
-              category: "python3",
-              region: "EU • 043a9bc6",
-              status: isRunning ? "RUNNING" : "RUNNING",
-              ramUsage: "142.29 MB RAM",
-              cpuUsage: "9.407% CPU",
-              diskUsage: "83.92 MB Disk",
-              daysLeft: "14d left",
-              planName: "Free Starter",
-              planPrice: 0,
-              createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
-            },
-            {
-              id: "voltx",
-              name: "Voltx",
-              category: "node.js generic",
-              region: "eu-24-3 • c67c3000",
-              status: "RUNNING",
-              ramUsage: "151.90 MB RAM",
-              cpuUsage: "0.356% CPU",
-              diskUsage: "102.51 MB Disk",
-              daysLeft: "17d left",
-              planName: "Mini-v1",
-              planPrice: 100,
-              createdAt: new Date(Date.now() - 6 * 86400000).toISOString(),
-            },
-          ];
+          const displayServers = servers || [];
 
-          const displayServers = servers && servers.length > 0 ? servers : defaultServers;
+          if (displayServers.length === 0) {
+            return (
+              <div className="p-8 text-center bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+                  <Server className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">
+                    {lang === "bn" ? "কোন সক্রিয় সার্ভার নেই" : "No Active Servers"}
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+                    {lang === "bn"
+                      ? "আপনার কোনো সক্রিয় ক্লাউড সার্ভার নেই। বট রান করতে নিচের বাটনে ক্লিক করে নতুন সার্ভার ডিপ্লয় করুন।"
+                      : "You have no active cloud servers. Deploy a new server to run your bot."}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setDeployPlan({
+                      id: "mini-v1",
+                      name: "Mini-v1",
+                      price: 100,
+                    });
+                    setIsDeployModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#5438dc] hover:bg-[#432bc4] text-white text-xs font-semibold shadow-2xs cursor-pointer transition-all active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === "bn" ? "নতুন সার্ভার ডিপ্লয় করুন" : "Deploy Server"}</span>
+                </button>
+              </div>
+            );
+          }
 
           const handleServerToggle = async (srv: ActiveServer, action: "start" | "stop" | "restart") => {
             setServerActionLoading(srv.id);
@@ -423,13 +427,44 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
                 if (action === "stop") onStopBot();
                 else if (action === "start") onStartBot();
                 else if (action === "restart") onRestartBot?.();
-              } else {
-                await fetch("/api/servers/action", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ serverId: srv.id, action }),
-                });
+              }
+              await fetch("/api/servers/action", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ serverId: srv.id, action }),
+              });
+              onRefreshServers?.();
+            } catch {
+              // ignore
+            } finally {
+              setServerActionLoading(null);
+            }
+          };
+
+          const handleDeleteServer = async (srvId: string, srvName: string) => {
+            const confirmMsg =
+              lang === "bn"
+                ? `আপনি কি সত্যিই "${srvName}" সার্ভারটি ডিলিট করতে চান?`
+                : `Are you sure you want to delete server "${srvName}"?`;
+            if (!window.confirm(confirmMsg)) return;
+
+            setServerActionLoading(srvId);
+            try {
+              const res = await fetch(`/api/servers/${srvId}`, {
+                method: "DELETE",
+              });
+              if (res.ok) {
                 onRefreshServers?.();
+                onAddNotification?.({
+                  id: `srv-del-${Date.now()}`,
+                  title: "Server Removed",
+                  titleBn: "সার্ভার ডিলিট হয়েছে",
+                  desc: `Server "${srvName}" was terminated.`,
+                  descBn: `সার্ভার "${srvName}" ডিলিট করা হয়েছে।`,
+                  timestamp: new Date().toISOString(),
+                  type: "system",
+                  read: false,
+                });
               }
             } catch {
               // ignore
@@ -440,16 +475,19 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
 
           return displayServers.map((srv, idx) => {
             const isSrvManaging = managingServerId === srv.id;
-            const isSrvRunning = srv.id === "nova" ? isRunning : srv.status === "RUNNING";
+            // Real status: RUNNING only when server.status is explicitly "RUNNING"
+            const isSrvRunning = srv.status === "RUNNING";
 
-            // Sparkline wave paths for aesthetic variety
+            // Active wave if running; flat neutral line if stopped
             const wavePaths = [
               "M2 24 L10 20 L20 27 L30 15 L40 22 L50 8 L60 18 L70 11 L80 19 L90 8 L98 14",
               "M2 22 L12 26 L22 18 L32 24 L42 12 L52 20 L62 10 L72 16 L82 8 L92 14 L98 10",
               "M2 20 L10 12 L20 25 L30 16 L40 20 L50 6 L60 15 L70 9 L80 22 L90 7 L98 12",
               "M2 26 L12 18 L22 22 L32 14 L42 19 L52 9 L62 16 L72 12 L82 17 L92 10 L98 13",
             ];
-            const wavePath = wavePaths[idx % wavePaths.length];
+            const wavePath = isSrvRunning
+              ? wavePaths[idx % wavePaths.length]
+              : "M2 17 L98 17";
 
             return (
               <div
@@ -536,9 +574,9 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
 
                   {/* Stats Column: Right-aligned */}
                   <div className="text-right space-y-0.5 text-xs sm:text-[13px] text-slate-700 font-sans font-medium">
-                    <div>{srv.ramUsage || "128 MB RAM"}</div>
-                    <div>{srv.cpuUsage || "1.25% CPU"}</div>
-                    <div>{srv.diskUsage || "64 MB Disk"}</div>
+                    <div>{isSrvRunning ? (srv.ramUsage || "84.50 MB RAM") : "0.00 MB RAM"}</div>
+                    <div>{isSrvRunning ? (srv.cpuUsage || "0.45% CPU") : "0.00% CPU"}</div>
+                    <div>{isSrvRunning ? (srv.diskUsage || "14.2 MB Disk") : "0.00 MB Disk"}</div>
                   </div>
                 </div>
 
@@ -624,6 +662,16 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
                       >
                         <RotateCw className="w-3.5 h-3.5" />
                         <span>{lang === "bn" ? "রিস্টার্ট" : "Restart"}</span>
+                      </button>
+
+                      <button
+                        disabled={isActionLoading || serverActionLoading === srv.id}
+                        onClick={() => handleDeleteServer(srv.id, srv.name)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                        title={lang === "bn" ? "সার্ভার ডিলিট করুন" : "Delete Server"}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>{lang === "bn" ? "ডিলিট" : "Delete"}</span>
                       </button>
 
                       {srv.id === "nova" && onInstallReqs && (
