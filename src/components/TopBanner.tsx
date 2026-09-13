@@ -370,35 +370,35 @@ export const TopBanner: React.FC<TopBannerProps> = ({
 
             {/* User Profile / Wallet Popover matching user screenshot */}
             {isProfileOpen && (
-              <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200/90 rounded-2xl shadow-xl p-4 sm:p-5 z-50 animate-in fade-in slide-in-from-top-2">
+              <div className="absolute -right-[38px] sm:-right-[40px] mt-2 w-[270px] sm:w-[280px] bg-white border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-900/10 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
                 {/* User Header */}
                 <div className="pb-3 border-b border-slate-100">
-                  <h3 className="text-base font-bold text-slate-900 leading-tight">Alif Sheikh</h3>
-                  <p className="text-sm text-slate-500 mt-0.5 select-all font-sans">
+                  <h3 className="text-sm font-bold text-slate-900 leading-tight">Alif Sheikh</h3>
+                  <p className="text-xs text-slate-500 mt-0.5 select-all font-sans">
                     asikgamerbd@gmail.com
                   </p>
                 </div>
 
                 {/* Balance Gray Card */}
-                <div className="my-3.5 p-3.5 rounded-2xl bg-slate-50 border border-slate-100/90">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <div className="my-3 px-3.5 py-2.5 rounded-xl bg-slate-50/90 border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block leading-tight">
                     BALANCE
                   </span>
-                  <span className="text-2xl font-extrabold text-slate-900 font-sans tracking-tight block">
+                  <span className="text-lg font-bold text-slate-900 font-sans tracking-tight block mt-0.5">
                     ৳{walletBalance.toFixed(2)}
                   </span>
                 </div>
 
                 {/* Actions List */}
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   <button
                     onClick={() => {
                       setIsProfileOpen(false);
                       onNavigate("/billing");
                     }}
-                    className="w-full text-left py-2.5 px-2 rounded-xl text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-3 text-sm font-medium cursor-pointer"
+                    className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
                   >
-                    <PlusCircle className="w-5 h-5 text-slate-600 stroke-[1.8]" />
+                    <PlusCircle className="w-4 h-4 text-slate-500 stroke-[1.8]" />
                     <span>Add Funds</span>
                   </button>
 
@@ -407,22 +407,22 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                       setIsProfileOpen(false);
                       onNavigate("/billing");
                     }}
-                    className="w-full text-left py-2.5 px-2 rounded-xl text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-3 text-sm font-medium cursor-pointer"
+                    className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
                   >
-                    <FileText className="w-5 h-5 text-slate-600 stroke-[1.8]" />
+                    <FileText className="w-4 h-4 text-slate-500 stroke-[1.8]" />
                     <span>Invoices</span>
                   </button>
                 </div>
 
                 {/* Sign Out Row */}
-                <div className="border-t border-slate-100 mt-2.5 pt-2">
+                <div className="border-t border-slate-100 mt-2 pt-2">
                   <button
                     onClick={() => {
                       setIsProfileOpen(false);
                     }}
-                    className="w-full text-left py-2 px-2 rounded-xl text-rose-500 hover:bg-rose-50 active:scale-[0.99] transition-colors flex items-center gap-3 text-sm font-medium cursor-pointer"
+                    className="w-full text-left py-1.5 px-1.5 rounded-lg text-rose-500 hover:bg-rose-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
                   >
-                    <LogOut className="w-5 h-5 text-rose-500 stroke-[1.8]" />
+                    <LogOut className="w-4 h-4 text-rose-500 stroke-[1.8]" />
                     <span>Sign Out</span>
                   </button>
                 </div>
