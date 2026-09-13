@@ -185,15 +185,26 @@ export const TopBanner: React.FC<TopBannerProps> = ({
 
         {/* RIGHT: Action Icons matching screenshot */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* 1. Monitor / Desktop Icon Container */}
+          {/* 1. Money Logo & Current User Balance (Beside Notifications) */}
           <button
-            id="banner-monitor-btn"
+            id="banner-wallet-balance-btn"
             type="button"
-            onClick={handleMonitorClick}
-            className="w-10 h-10 rounded-2xl border border-slate-200/90 bg-slate-50/80 hover:bg-slate-100/90 active:scale-95 flex items-center justify-center text-slate-700 transition-all shadow-2xs"
-            title={lang === "bn" ? "লাইভ কনসোল / টার্মিনাল মনিটর" : "Open Live Terminal Monitor"}
+            onClick={() => onNavigate("/billing")}
+            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-10 rounded-2xl border border-emerald-200/90 bg-emerald-50/80 hover:bg-emerald-100 active:scale-95 text-emerald-950 transition-all shadow-2xs cursor-pointer group"
+            title={
+              lang === "bn"
+                ? `বর্তমান ব্যালেন্স: ৳${walletBalance.toFixed(2)} (টাকা যোগ করতে ক্লিক করুন)`
+                : `Current Balance: ৳${walletBalance.toFixed(2)} (Click to recharge)`
+            }
           >
-            <Monitor className="w-5 h-5 text-slate-700" />
+            <div className="w-6 h-6 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-2xs font-extrabold text-xs group-hover:scale-105 transition-transform shrink-0">
+              ৳
+            </div>
+            <div className="flex flex-col items-start leading-none pr-0.5">
+              <span className="font-mono font-extrabold text-xs sm:text-sm text-emerald-900 tracking-tight">
+                ৳{walletBalance.toFixed(2)}
+              </span>
+            </div>
           </button>
 
           {/* 2. Notification Bell */}

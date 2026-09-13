@@ -106,24 +106,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls & Language */}
         <div className="flex items-center flex-wrap gap-2 w-full md:w-auto justify-end">
-          {/* Wallet Balance Display Pill */}
-          {walletBalance !== undefined && (
-            <button
-              id="header-wallet-btn"
-              onClick={onNavigateToBilling}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-xs font-semibold text-indigo-900 transition-all shadow-2xs group"
-              title={lang === "bn" ? "ওয়ালেট ব্যালেন্স দেখুন ও রিচার্জ করুন" : "View & Add Funds to Wallet"}
-            >
-              <Wallet className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
-              <span>
-                {lang === "bn" ? "ব্যালেন্স:" : "Balance:"}{" "}
-                <span className="font-mono text-indigo-700 font-bold">
-                  ৳{walletBalance.toFixed(2)}
-                </span>
-              </span>
-            </button>
-          )}
-
           {/* Language toggle */}
           <button
             id="lang-toggle-btn"
