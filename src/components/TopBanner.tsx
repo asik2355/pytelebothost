@@ -234,7 +234,12 @@ export const TopBanner: React.FC<TopBannerProps> = ({
 
             {/* Notification Dropdown Menu */}
             {isNotificationsOpen && (
-              <div className="absolute right-0 mt-2 w-84 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
+              <>
+                <div
+                  className="fixed inset-0 top-11 bg-black/20 z-40 sm:hidden"
+                  onClick={() => setIsNotificationsOpen(false)}
+                />
+                <div className="fixed left-3 right-3 top-[50px] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-96 sm:mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 px-2">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -353,8 +358,9 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                   )}
                 </div>
               </div>
-            )}
-          </div>
+            </>
+          )}
+        </div>
 
           {/* 3. Circular Gradient User Avatar */}
           <div className="relative" ref={profileRef}>
@@ -370,63 +376,70 @@ export const TopBanner: React.FC<TopBannerProps> = ({
 
             {/* User Profile / Wallet Popover matching user screenshot */}
             {isProfileOpen && (
-              <div className="absolute -right-[38px] sm:-right-[40px] mt-2 w-[270px] sm:w-[280px] bg-white border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-900/10 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
-                {/* User Header */}
-                <div className="pb-3 border-b border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900 leading-tight">Alif Sheikh</h3>
-                  <p className="text-xs text-slate-500 mt-0.5 select-all font-sans">
-                    asikgamerbd@gmail.com
-                  </p>
-                </div>
+              <>
+                {/* Mobile Backdrop */}
+                <div
+                  className="fixed inset-0 top-11 bg-black/20 z-40 sm:hidden"
+                  onClick={() => setIsProfileOpen(false)}
+                />
+                <div className="fixed left-3 right-3 top-[50px] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-[320px] sm:mt-2 bg-white border border-slate-200/90 rounded-2xl shadow-xl shadow-slate-900/10 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  {/* User Header */}
+                  <div className="pb-3 border-b border-slate-100">
+                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Alif Sheikh</h3>
+                    <p className="text-xs text-slate-500 mt-0.5 select-all font-sans">
+                      asikgamerbd@gmail.com
+                    </p>
+                  </div>
 
-                {/* Balance Gray Card */}
-                <div className="my-3 px-3.5 py-2.5 rounded-xl bg-slate-50/90 border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block leading-tight">
-                    BALANCE
-                  </span>
-                  <span className="text-lg font-bold text-slate-900 font-sans tracking-tight block mt-0.5">
-                    ৳{walletBalance.toFixed(2)}
-                  </span>
-                </div>
+                  {/* Balance Gray Card */}
+                  <div className="my-3 px-3.5 py-2.5 rounded-xl bg-slate-50/90 border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block leading-tight">
+                      BALANCE
+                    </span>
+                    <span className="text-lg font-bold text-slate-900 font-sans tracking-tight block mt-0.5">
+                      ৳{walletBalance.toFixed(2)}
+                    </span>
+                  </div>
 
-                {/* Actions List */}
-                <div className="space-y-0.5">
-                  <button
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                      onNavigate("/billing");
-                    }}
-                    className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
-                  >
-                    <PlusCircle className="w-4 h-4 text-slate-500 stroke-[1.8]" />
-                    <span>Add Funds</span>
-                  </button>
+                  {/* Actions List */}
+                  <div className="space-y-0.5">
+                    <button
+                      onClick={() => {
+                        setIsProfileOpen(false);
+                        onNavigate("/billing");
+                      }}
+                      className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
+                    >
+                      <PlusCircle className="w-4 h-4 text-slate-500 stroke-[1.8]" />
+                      <span>Add Funds</span>
+                    </button>
 
-                  <button
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                      onNavigate("/billing");
-                    }}
-                    className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
-                  >
-                    <FileText className="w-4 h-4 text-slate-500 stroke-[1.8]" />
-                    <span>Invoices</span>
-                  </button>
-                </div>
+                    <button
+                      onClick={() => {
+                        setIsProfileOpen(false);
+                        onNavigate("/billing");
+                      }}
+                      className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4 text-slate-500 stroke-[1.8]" />
+                      <span>Invoices</span>
+                    </button>
+                  </div>
 
-                {/* Sign Out Row */}
-                <div className="border-t border-slate-100 mt-2 pt-2">
-                  <button
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                    }}
-                    className="w-full text-left py-1.5 px-1.5 rounded-lg text-rose-500 hover:bg-rose-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
-                  >
-                    <LogOut className="w-4 h-4 text-rose-500 stroke-[1.8]" />
-                    <span>Sign Out</span>
-                  </button>
+                  {/* Sign Out Row */}
+                  <div className="border-t border-slate-100 mt-2 pt-2">
+                    <button
+                      onClick={() => {
+                        setIsProfileOpen(false);
+                      }}
+                      className="w-full text-left py-1.5 px-1.5 rounded-lg text-rose-500 hover:bg-rose-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-rose-500 stroke-[1.8]" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
 
