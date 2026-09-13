@@ -1,5 +1,5 @@
 import React from "react";
-import { Play, Square, RotateCw, Download, Terminal, Globe, Cpu } from "lucide-react";
+import { Play, Square, RotateCw, Download, Terminal, Globe, Wallet } from "lucide-react";
 import { WorkspaceStatus } from "../types";
 
 interface HeaderProps {
@@ -11,6 +11,8 @@ interface HeaderProps {
   onRestart: () => void;
   onInstall: () => void;
   isActionLoading: boolean;
+  walletBalance?: number;
+  onNavigateToBilling?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +24,8 @@ export const Header: React.FC<HeaderProps> = ({
   onRestart,
   onInstall,
   isActionLoading,
+  walletBalance,
+  onNavigateToBilling,
 }) => {
   const isRunning = status?.status === "running";
   const isInstalling = status?.status === "installing";
@@ -35,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header id="app-header" className="border-b border-slate-200 bg-white sticky top-0 z-30 shadow-xs">
+    <header id="app-header" className="border-b border-slate-200 bg-white shadow-2xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         {/* Logo & Status */}
         <div className="flex items-center gap-3">
@@ -102,6 +106,24 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls & Language */}
         <div className="flex items-center flex-wrap gap-2 w-full md:w-auto justify-end">
+          {/* Wallet Balance Display Pill */}
+          {walletBalance !== undefined && (
+            <button
+              id="header-wallet-btn"
+              onClick={onNavigateToBilling}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-xs font-semibold text-indigo-900 transition-all shadow-2xs group"
+              title={lang === "bn" ? "ওয়ালেট ব্যালেন্স দেখুন ও রিচার্জ করুন" : "View & Add Funds to Wallet"}
+            >
+              <Wallet className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
+              <span>
+                {lang === "bn" ? "ব্যালেন্স:" : "Balance:"}{" "}
+                <span className="font-mono text-indigo-700 font-bold">
+                  ৳{walletBalance.toFixed(2)}
+                </span>
+              </span>
+            </button>
+          )}
+
           {/* Language toggle */}
           <button
             id="lang-toggle-btn"

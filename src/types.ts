@@ -38,3 +38,18 @@ export interface StarterTemplate {
   descriptionBn: string;
   badge: string;
 }
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  titleBn: string;
+  desc: string;
+  descBn: string;
+  timestamp: string;
+  type: "deposit" | "plan" | "system" | "bot";
+  read: boolean;
+  amount?: number;
+  method?: string;
+  planName?: string;
+  link?: string;
+}

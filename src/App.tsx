@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { TopBanner } from "./components/TopBanner";
 import { Header } from "./components/Header";
 import { TokenCard } from "./components/TokenCard";
 import { FileUploader } from "./components/FileUploader";
@@ -11,7 +12,7 @@ import { HomePageView } from "./components/HomePageView";
 import { ServicesPageView } from "./components/ServicesPageView";
 import { BillingPageView } from "./components/BillingPageView";
 import { BotStorePageView } from "./components/BotStorePageView";
-import { WorkspaceStatus, BotLog, TelegramBotProfile } from "./types";
+import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification } from "./types";
 import { AlertTriangle, Play, HelpCircle, BookOpen, Bot } from "lucide-react";
 
 export default function App() {
@@ -22,6 +23,52 @@ export default function App() {
   const [botProfile, setBotProfile] = useState<TelegramBotProfile | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"workspace" | "env" | "templates">("workspace");
+  const [walletBalance, setWalletBalance] = useState<number>(117.50);
+
+  // Persistent user notifications for plan changes, money top-ups, system events
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    try {
+      const saved = localStorage.getItem("zerobot_notifications");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // ignore
+    }
+    return [
+      {
+        id: "notif-init-1",
+        title: "Welcome to Zero-Bot",
+        titleBn: "Zero-Bot এ স্বাগতম",
+        desc: "Python 3.10 cloud sandbox is active with ৳117.50 starter balance.",
+        descBn: "আপনার ক্লাউড স্যান্ডবক্স প্রস্তুত এবং ওয়ালেটে ৳১১৭.৫০ প্রারম্ভিক ব্যালেন্স যুক্ত আছে।",
+        timestamp: new Date(Date.now() - 3600000).toISOString(),
+        type: "system",
+        read: false,
+        link: "/home",
+      },
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("zerobot_notifications", JSON.stringify(notifications));
+    } catch {
+      // ignore
+    }
+  }, [notifications]);
+
+  const handleAddNotification = useCallback((newNotif: AppNotification) => {
+    setNotifications((prev) => [newNotif, ...prev]);
+  }, []);
+
+  const handleMarkAllNotificationsRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  }, []);
+
+  const handleClearNotifications = useCallback(() => {
+    setNotifications([]);
+  }, []);
 
   // Router state: HOME, SERVICES, BILLING, BOT STORE
   const [currentRoute, setCurrentRoute] = useState<NavRoute>(() => {
@@ -65,6 +112,19 @@ export default function App() {
   }, []);
 
   // Fetch Workspace Info & Token
+  const fetchWallet = useCallback(async () => {
+    try {
+      const res = await fetch("/api/billing/wallet");
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.balance === "number") {
+          setWalletBalance(data.balance);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const fetchWorkspace = useCallback(async () => {
     try {
@@ -73,10 +133,11 @@ export default function App() {
         const data: WorkspaceStatus = await res.json();
         setStatus(data);
       }
+      fetchWallet();
     } catch {
       // ignore
     }
-  }, []);
+  }, [fetchWallet]);
 
   // Fetch Current Token from .env
   const fetchCurrentToken = useCallback(async () => {
@@ -218,12 +279,25 @@ export default function App() {
     }
     setIsActionLoading(true);
     try {
-      await fetch("/api/bot/start", {
+      const res = await fetch("/api/bot/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entryFile: status?.currentEntryFile || "bot.py" }),
       });
       fetchWorkspace();
+      if (res.ok) {
+        handleAddNotification({
+          id: `notif-bot-start-${Date.now()}`,
+          title: "Bot Process Started",
+          titleBn: "টেলিগ্রাম বট সফলভাবে চালু হয়েছে",
+          desc: "Python process is running and actively listening for messages.",
+          descBn: "পাইথন বট প্রসেসটি সফলভাবে রান হচ্ছে এবং মেসেজের অপেক্ষা করছে।",
+          timestamp: new Date().toISOString(),
+          type: "bot",
+          read: false,
+          link: "/home",
+        });
+      }
     } finally {
       setIsActionLoading(false);
     }
@@ -232,8 +306,21 @@ export default function App() {
   const handleStopBot = async () => {
     setIsActionLoading(true);
     try {
-      await fetch("/api/bot/stop", { method: "POST" });
+      const res = await fetch("/api/bot/stop", { method: "POST" });
       fetchWorkspace();
+      if (res.ok) {
+        handleAddNotification({
+          id: `notif-bot-stop-${Date.now()}`,
+          title: "Bot Stopped",
+          titleBn: "টেলিগ্রাম বট বন্ধ করা হয়েছে",
+          desc: "Python bot process has been stopped.",
+          descBn: "বট প্রসেসটি নিরাপদে বন্ধ করা হয়েছে।",
+          timestamp: new Date().toISOString(),
+          type: "bot",
+          read: false,
+          link: "/home",
+        });
+      }
     } finally {
       setIsActionLoading(false);
     }
@@ -302,17 +389,37 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
-      {/* Top Navbar */}
-      <Header
-        status={status}
+      {/* Permanent Top Banner (Zero-Bot) */}
+      <TopBanner
         lang={lang}
         setLang={setLang}
-        onStart={handleStartBot}
-        onStop={handleStopBot}
-        onRestart={handleRestartBot}
-        onInstall={handleInstallReqs}
-        isActionLoading={isActionLoading}
+        status={status}
+        walletBalance={walletBalance}
+        currentRoute={currentRoute}
+        onNavigate={navigateTo}
+        onStartBot={handleStartBot}
+        onStopBot={handleStopBot}
+        onRestartBot={handleRestartBot}
+        notifications={notifications}
+        onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+        onClearNotifications={handleClearNotifications}
       />
+
+      {/* Bot Runner Status & Control Toolbar (Active on Home) */}
+      {currentRoute === "/home" && (
+        <Header
+          status={status}
+          lang={lang}
+          setLang={setLang}
+          onStart={handleStartBot}
+          onStop={handleStopBot}
+          onRestart={handleRestartBot}
+          onInstall={handleInstallReqs}
+          isActionLoading={isActionLoading}
+          walletBalance={walletBalance}
+          onNavigateToBilling={() => navigateTo("/billing")}
+        />
+      )}
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-5 pb-24">
@@ -460,6 +567,7 @@ export default function App() {
             lang={lang}
             status={status}
             onNavigate={navigateTo}
+            onAddNotification={handleAddNotification}
           />
         )}
 
@@ -468,6 +576,8 @@ export default function App() {
           <BillingPageView
             lang={lang}
             onNavigate={navigateTo}
+            onWalletUpdated={(balance) => setWalletBalance(balance)}
+            onAddNotification={handleAddNotification}
           />
         )}
 
@@ -481,50 +591,52 @@ export default function App() {
           />
         )}
 
-        {/* Bottom Helper Guide / FAQ in Bengali & English */}
-        <section id="usage-guide" className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-          <div className="flex items-center gap-2 mb-3">
-            <BookOpen className="w-4 h-4 text-sky-600" />
-            <h2 className="text-sm font-semibold text-slate-900">
-              {lang === "bn" ? "ব্যবহার নির্দেশিকা (How to use)" : "User Guide & Troubleshooting"}
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600 leading-relaxed">
-            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-              <span className="font-semibold text-slate-800 flex items-center gap-1 mb-1">
-                1. {lang === "bn" ? "ফাইল আপলোড" : "Upload Files"}
-              </span>
-              <p>
-                {lang === "bn"
-                  ? "আপনার বটের python কোড (যেমন bot.py) এবং লাইব্রেরির তালিকা (requirements.txt) ড্র্যাগ করে আপলোড করুন।"
-                  : "Drag and drop your bot python code (bot.py) and requirements.txt to the workspace."}
-              </p>
+        {/* Bottom Helper Guide / FAQ in Bengali & English (Only on Home Workspace) */}
+        {currentRoute === "/home" && (
+          <section id="usage-guide" className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+            <div className="flex items-center gap-2 mb-3">
+              <BookOpen className="w-4 h-4 text-sky-600" />
+              <h2 className="text-sm font-semibold text-slate-900">
+                {lang === "bn" ? "ব্যবহার নির্দেশিকা (How to use)" : "User Guide & Troubleshooting"}
+              </h2>
             </div>
 
-            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-              <span className="font-semibold text-slate-800 flex items-center gap-1 mb-1">
-                2. {lang === "bn" ? "প্যাকেজ ইনস্টল ও টোকেন" : "Install Pip & Set Token"}
-              </span>
-              <p>
-                {lang === "bn"
-                  ? "উপরে 'প্যাকেজ ইনস্টল (pip)' বাটনে ক্লিক করুন। তারপর BotFather থেকে পাওয়া টোকেনটি পেস্ট করে সেভ করুন।"
-                  : "Click 'Install Pip Reqs' to install packages, then paste and verify your Telegram Bot Token."}
-              </p>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600 leading-relaxed">
+              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+                <span className="font-semibold text-slate-800 flex items-center gap-1 mb-1">
+                  1. {lang === "bn" ? "ফাইল আপলোড" : "Upload Files"}
+                </span>
+                <p>
+                  {lang === "bn"
+                    ? "আপনার বটের python কোড (যেমন bot.py) এবং লাইব্রেরির তালিকা (requirements.txt) ড্র্যাগ করে আপলোড করুন।"
+                    : "Drag and drop your bot python code (bot.py) and requirements.txt to the workspace."}
+                </p>
+              </div>
 
-            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-              <span className="font-semibold text-slate-800 flex items-center gap-1 mb-1">
-                3. {lang === "bn" ? "বট চালু ও টেস্ট" : "Start & Test Bot"}
-              </span>
-              <p>
-                {lang === "bn"
-                  ? "'বট চালু করুন (Run)' বাটনে ক্লিক করুন। লাইভ টার্মিনালে মেসেজ এবং লগ দেখতে পাবেন। Telegram এ গিয়ে বটের সাথে চ্যাট করুন!"
-                  : "Click 'Start Bot' to launch the Python process. View live stdout/stderr logs in the console terminal."}
-              </p>
+              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+                <span className="font-semibold text-slate-800 flex items-center gap-1 mb-1">
+                  2. {lang === "bn" ? "প্যাকেজ ইনস্টল ও টোকেন" : "Install Pip & Set Token"}
+                </span>
+                <p>
+                  {lang === "bn"
+                    ? "উপরে 'প্যাকেজ ইনস্টল (pip)' বাটনে ক্লিক করুন। তারপর BotFather থেকে পাওয়া টোকেনটি পেস্ট করে সেভ করুন।"
+                    : "Click 'Install Pip Reqs' to install packages, then paste and verify your Telegram Bot Token."}
+                </p>
+              </div>
+
+              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+                <span className="font-semibold text-slate-800 flex items-center gap-1 mb-1">
+                  3. {lang === "bn" ? "বট চালু ও টেস্ট" : "Start & Test Bot"}
+                </span>
+                <p>
+                  {lang === "bn"
+                    ? "'বট চালু করুন (Run)' বাটনে ক্লিক করুন। লাইভ টার্মিনালে মেসেজ এবং লগ দেখতে পাবেন। Telegram এ গিয়ে বটের সাথে চ্যাট করুন!"
+                    : "Click 'Start Bot' to launch the Python process. View live stdout/stderr logs in the console terminal."}
+                </p>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
       </main>
 
       {/* Persistent Bottom Navigation Bar in English (HOME, SERVICE, BILLING, BOT STORE) */}

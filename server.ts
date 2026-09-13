@@ -684,6 +684,103 @@ app.get("/api/bot/logs/stream", (req, res) => {
   });
 });
 
+// ---------------- BILLING & WALLET API ----------------
+const WALLET_FILE = path.join(WORKSPACE_DIR, ".wallet.json");
+
+interface WalletData {
+  balance: number;
+  currency: string;
+  transactions: Array<{
+    id: string;
+    amount: number;
+    type: "deposit" | "charge";
+    description: string;
+    date: string;
+    status: "completed" | "pending";
+    method?: string;
+  }>;
+}
+
+function getWalletData(): WalletData {
+  try {
+    if (fs.existsSync(WALLET_FILE)) {
+      const data = fs.readFileSync(WALLET_FILE, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch {
+    // fallback
+  }
+  return {
+    balance: 117.50, // Matches initial sample value in screenshot
+    currency: "৳",
+    transactions: [
+      {
+        id: "TX-1001",
+        amount: 100,
+        type: "deposit",
+        description: "Wallet Recharge (bKash)",
+        date: new Date(Date.now() - 86400000).toISOString(),
+        status: "completed",
+        method: "bKash",
+      },
+      {
+        id: "TX-1000",
+        amount: 17.50,
+        type: "deposit",
+        description: "Welcome Promotional Credit",
+        date: new Date(Date.now() - 172800000).toISOString(),
+        status: "completed",
+        method: "Promo",
+      }
+    ],
+  };
+}
+
+function saveWalletData(data: WalletData) {
+  try {
+    fs.writeFileSync(WALLET_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to save wallet data", err);
+  }
+}
+
+app.get("/api/billing/wallet", (req, res) => {
+  const wallet = getWalletData();
+  res.json(wallet);
+});
+
+app.post("/api/billing/recharge", (req, res) => {
+  const { amount, method } = req.body;
+  const numAmount = parseFloat(amount);
+  if (isNaN(numAmount) || numAmount <= 0) {
+    return res.status(400).json({ error: "Invalid recharge amount" });
+  }
+
+  const wallet = getWalletData();
+  const txId = `TX-${Date.now().toString().slice(-6)}`;
+  wallet.balance = Math.round((wallet.balance + numAmount) * 100) / 100;
+  wallet.transactions.unshift({
+    id: txId,
+    amount: numAmount,
+    type: "deposit",
+    description: `Wallet Recharge (${method || "Instant Pay"})`,
+    date: new Date().toISOString(),
+    status: "completed",
+    method: method || "Instant Pay",
+  });
+
+  saveWalletData(wallet);
+  addLog("system", `💳 Wallet balance recharged by ৳${numAmount.toFixed(2)}. New balance: ৳${wallet.balance.toFixed(2)}`);
+
+  res.json({
+    success: true,
+    newBalance: wallet.balance,
+    transactionId: txId,
+    message: `Recharge of ৳${numAmount.toFixed(2)} successful!`,
+  });
+});
+
+
 // ---------------- VITE MIDDLEWARE & SERVER BOOT ----------------
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
