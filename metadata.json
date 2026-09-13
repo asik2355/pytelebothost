@@ -1,0 +1,6 @@
+{
+  "name": "Telegram Bot Runner",
+  "description": "Upload Python files, requirements.txt, and run Telegram bots online with live terminal logs and environment configuration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
