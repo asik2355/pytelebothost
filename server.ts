@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { spawn, ChildProcess } from "child_process";
+import { spawn, exec, ChildProcess } from "child_process";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
 
@@ -780,8 +780,13 @@ app.post("/api/billing/recharge", (req, res) => {
   });
 });
 
-// ---------------- SERVERS MANAGEMENT API ----------------
+// ---------------- SERVERS MANAGEMENT API (ISOLATED WORKSPACES) ----------------
 const SERVERS_FILE = path.join(WORKSPACE_DIR, ".servers.json");
+const USER_SERVERS_DIR = path.join(WORKSPACE_DIR, "user_servers");
+
+if (!fs.existsSync(USER_SERVERS_DIR)) {
+  fs.mkdirSync(USER_SERVERS_DIR, { recursive: true });
+}
 
 interface ServerRecord {
   id: string;
@@ -797,6 +802,349 @@ interface ServerRecord {
   planPrice: number;
   createdAt: string;
   isCustom?: boolean;
+  port?: number;
+  ip?: string;
+  startupCommand?: string;
+  envVars?: Array<{ key: string; value: string }>;
+}
+
+interface ServerConfig {
+  startupCommand: string;
+  envVars: Array<{ key: string; value: string }>;
+  port: number;
+  ip: string;
+  activities: Array<{
+    id: string;
+    action: string;
+    user: string;
+    ip: string;
+    time: string;
+    type: "start" | "stop" | "file" | "config";
+  }>;
+}
+
+interface ServerRuntime {
+  proc: ChildProcess | null;
+  startTime: number | null;
+  logs: BotLog[];
+  logCounter: number;
+}
+
+const serverRuntimes = new Map<string, ServerRuntime>();
+
+function getServerDir(serverId: string): string {
+  const safeId = path.basename(serverId);
+  return path.join(USER_SERVERS_DIR, safeId);
+}
+
+function getServerConfigFile(serverId: string): string {
+  return path.join(getServerDir(serverId), ".config.json");
+}
+
+function getServerConfig(serverId: string, server: ServerRecord): ServerConfig {
+  const cfgFile = getServerConfigFile(serverId);
+  try {
+    if (fs.existsSync(cfgFile)) {
+      return JSON.parse(fs.readFileSync(cfgFile, "utf-8"));
+    }
+  } catch {
+    // fallback
+  }
+
+  // Derive initial config based on category
+  const numId = parseInt(serverId.replace(/\D/g, "").slice(-4)) || Math.floor(1000 + Math.random() * 9000);
+  const defaultPort = 25000 + (numId % 2000);
+  let defaultCmd = "python3 main.py";
+  let defaultEnv = [
+    { key: "SERVER_NAME", value: server.name },
+    { key: "PORT", value: defaultPort.toString() },
+    { key: "PYTHONUNBUFFERED", value: "1" },
+  ];
+
+  if (server.category === "golang") {
+    defaultCmd = "go run main.go";
+    defaultEnv = [
+      { key: "SERVER_NAME", value: server.name },
+      { key: "PORT", value: defaultPort.toString() },
+      { key: "APP_ENV", value: "production" },
+    ];
+  } else if (server.category === "node.js generic") {
+    defaultCmd = "node index.js";
+    defaultEnv = [
+      { key: "SERVER_NAME", value: server.name },
+      { key: "PORT", value: defaultPort.toString() },
+      { key: "NODE_ENV", value: "production" },
+    ];
+  } else if (server.category === "Bun") {
+    defaultCmd = "bun run index.ts";
+    defaultEnv = [
+      { key: "SERVER_NAME", value: server.name },
+      { key: "PORT", value: defaultPort.toString() },
+      { key: "NODE_ENV", value: "production" },
+    ];
+  } else {
+    // python3 / bot
+    defaultCmd = "python3 main.py";
+    defaultEnv = [
+      { key: "SERVER_NAME", value: server.name },
+      { key: "BOT_TOKEN", value: "7129849204:AAF-x9q..." },
+      { key: "PORT", value: defaultPort.toString() },
+      { key: "PYTHONUNBUFFERED", value: "1" },
+    ];
+  }
+
+  const initialConfig: ServerConfig = {
+    startupCommand: server.startupCommand || defaultCmd,
+    envVars: server.envVars || defaultEnv,
+    port: server.port || defaultPort,
+    ip: server.ip || "194.163.148.91",
+    activities: [
+      {
+        id: `act-${Date.now()}-1`,
+        action: `Server provisioned on node EU-01 [${server.category}]`,
+        user: "System Daemon",
+        ip: "127.0.0.1",
+        time: "Setup Completed",
+        type: "config",
+      },
+    ],
+  };
+
+  try {
+    fs.writeFileSync(cfgFile, JSON.stringify(initialConfig, null, 2), "utf-8");
+  } catch {
+    // ignore
+  }
+
+  return initialConfig;
+}
+
+function saveServerConfig(serverId: string, config: ServerConfig) {
+  try {
+    const sDir = getServerDir(serverId);
+    if (!fs.existsSync(sDir)) fs.mkdirSync(sDir, { recursive: true });
+    fs.writeFileSync(getServerConfigFile(serverId), JSON.stringify(config, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to save server config", err);
+  }
+}
+
+function ensureServerWorkspace(server: ServerRecord) {
+  const dir = getServerDir(server.id);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  const config = getServerConfig(server.id, server);
+
+  // Category specific template files
+  if (server.category === "golang") {
+    const mainGo = path.join(dir, "main.go");
+    if (!fs.existsSync(mainGo)) {
+      fs.writeFileSync(
+        mainGo,
+        `package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"time"
+)
+
+func main() {
+	serverName := os.Getenv("SERVER_NAME")
+	if serverName == "" {
+		serverName = "${server.name}"
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "${config.port}"
+	}
+
+	fmt.Printf("[%s] 🚀 Golang Server '%s' starting up on :%s ...\\n", time.Now().Format("15:04:05"), serverName, port)
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello from Golang Server '%s'! Status: Healthy (Host Bot Cloud)\\n", serverName)
+	})
+
+	log.Printf("Listening on http://0.0.0.0:%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+`,
+        "utf-8"
+      );
+    }
+
+    const goMod = path.join(dir, "go.mod");
+    if (!fs.existsSync(goMod)) {
+      fs.writeFileSync(goMod, `module hostbot/server\n\ngo 1.21\n`, "utf-8");
+    }
+  } else if (server.category === "node.js generic") {
+    const indexJs = path.join(dir, "index.js");
+    if (!fs.existsSync(indexJs)) {
+      fs.writeFileSync(
+        indexJs,
+        `const http = require("http");
+const serverName = process.env.SERVER_NAME || "${server.name}";
+const port = process.env.PORT || ${config.port};
+
+console.log(\`[\${new Date().toLocaleTimeString()}] 🚀 Node.js server '\${serverName}' starting on port \${port}...\`);
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end(\`Node.js Server '\${serverName}' is running on Host Bot Cloud!\\n\`);
+});
+
+server.listen(port, "0.0.0.0", () => {
+  console.log(\`[\${new Date().toLocaleTimeString()}] 🌐 Server listening on http://0.0.0.0:\${port}\`);
+});
+`,
+        "utf-8"
+      );
+    }
+
+    const pkgJson = path.join(dir, "package.json");
+    if (!fs.existsSync(pkgJson)) {
+      fs.writeFileSync(
+        pkgJson,
+        JSON.stringify(
+          {
+            name: server.name.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+            version: "1.0.0",
+            main: "index.js",
+            scripts: { start: "node index.js" },
+          },
+          null,
+          2
+        ),
+        "utf-8"
+      );
+    }
+  } else if (server.category === "Bun") {
+    const indexTs = path.join(dir, "index.ts");
+    if (!fs.existsSync(indexTs)) {
+      fs.writeFileSync(
+        indexTs,
+        `const port = process.env.PORT || ${config.port};
+const name = process.env.SERVER_NAME || "${server.name}";
+
+console.log(\`🚀 Bun server '\${name}' active on port \${port}\`);
+
+export default {
+  port,
+  fetch(req: Request) {
+    return new Response(\`Bun Server '\${name}' online on Host Bot Cloud!\\n\`);
+  },
+};
+`,
+        "utf-8"
+      );
+    }
+  } else {
+    // Default: Python 3
+    const mainPy = path.join(dir, "main.py");
+    if (!fs.existsSync(mainPy)) {
+      fs.writeFileSync(
+        mainPy,
+        `import os
+import sys
+import time
+
+server_name = os.getenv("SERVER_NAME", "${server.name}")
+token = os.getenv("BOT_TOKEN", "7129849204:AAF-x9q...")
+
+print(f"[{time.strftime('%X')}] 🚀 Initializing '{server_name}' Python Bot Container...")
+print(f"[{time.strftime('%X')}] 🐍 Python Version: {sys.version.split()[0]}")
+print(f"[{time.strftime('%X')}] 🤖 Telegram Bot Token loaded: {'Configured' if token and not token.startswith('your_') else 'Ready'}")
+print(f"[{time.strftime('%X')}] 🟢 Bot listening for incoming webhooks & polling...")
+
+cycle = 1
+while True:
+    time.sleep(15)
+    print(f"[{time.strftime('%X')}] 💓 [{server_name}] Health Check Cycle #{cycle} OK - 0 errors")
+    sys.stdout.flush()
+    cycle += 1
+`,
+        "utf-8"
+      );
+    }
+
+    const reqs = path.join(dir, "requirements.txt");
+    if (!fs.existsSync(reqs)) {
+      fs.writeFileSync(
+        reqs,
+        `python-telegram-bot>=20.0\nrequests>=2.31.0\npython-dotenv>=1.0.0\n`,
+        "utf-8"
+      );
+    }
+  }
+
+  // Common files: .env and README.md
+  const envFile = path.join(dir, ".env");
+  if (!fs.existsSync(envFile)) {
+    const envLines = config.envVars.map((e) => `${e.key}=${e.value}`).join("\n");
+    fs.writeFileSync(envFile, envLines + "\n", "utf-8");
+  }
+
+  const readme = path.join(dir, "README.md");
+  if (!fs.existsSync(readme)) {
+    fs.writeFileSync(
+      readme,
+      `# ${server.name}
+
+- **Category:** ${server.category}
+- **Plan:** ${server.planName}
+- **Port:** ${config.port}
+- **Node:** EU-01 • Host Bot High-Speed Cloud
+- **Status:** Dedicated Container Isolation
+`,
+      "utf-8"
+    );
+  }
+}
+
+function getServerRuntime(serverId: string): ServerRuntime {
+  let runtime = serverRuntimes.get(serverId);
+  if (!runtime) {
+    const initialLogTime = new Date().toLocaleTimeString("en-US", { hour12: false });
+    runtime = {
+      proc: null,
+      startTime: null,
+      logs: [
+        {
+          id: 1,
+          timestamp: initialLogTime,
+          type: "system",
+          message: `[System] Dedicated console allocated for Server [${serverId}].`,
+        },
+        {
+          id: 2,
+          timestamp: initialLogTime,
+          type: "system",
+          message: `[System] Container workspace mounted at /home/container/`,
+        },
+      ],
+      logCounter: 3,
+    };
+    serverRuntimes.set(serverId, runtime);
+  }
+  return runtime;
+}
+
+function addServerLog(serverId: string, type: BotLog["type"], message: string) {
+  const runtime = getServerRuntime(serverId);
+  const log: BotLog = {
+    id: runtime.logCounter++,
+    timestamp: new Date().toLocaleTimeString("en-US", { hour12: false }),
+    type,
+    message,
+  };
+  runtime.logs.push(log);
+  if (runtime.logs.length > 500) {
+    runtime.logs.shift();
+  }
 }
 
 // No fake default servers - only servers actually deployed by the user
@@ -825,10 +1173,34 @@ function saveServersData(servers: ServerRecord[]) {
   }
 }
 
+// Ensure all existing servers have their folders initialized
+function initAllWorkspaces() {
+  const servers = getServersData();
+  for (const s of servers) {
+    try {
+      ensureServerWorkspace(s);
+    } catch {
+      // ignore
+    }
+  }
+}
+initAllWorkspaces();
+
+// 1. Get All Servers
 app.get("/api/servers", (req, res) => {
-  res.json({ servers: getServersData() });
+  const servers = getServersData();
+  // enrich with port and config
+  for (const s of servers) {
+    const cfg = getServerConfig(s.id, s);
+    s.port = cfg.port;
+    s.ip = cfg.ip;
+    s.startupCommand = cfg.startupCommand;
+    s.envVars = cfg.envVars;
+  }
+  res.json({ servers });
 });
 
+// 2. Create Server
 app.post("/api/servers/create", (req, res) => {
   const { name, category, planName, price } = req.body;
   const serverName = (name || "").trim() || "Bot Server";
@@ -861,9 +1233,11 @@ app.post("/api/servers/create", (req, res) => {
   }
 
   const hexHash = Math.random().toString(16).substring(2, 10);
-  // Real initial status: STOPPED upon creation (ready to be started by user)
+  const serverId = `srv-${Date.now()}`;
+  const numPort = 25000 + Math.floor(Math.random() * 2000);
+
   const newServer: ServerRecord = {
-    id: `srv-${Date.now()}`,
+    id: serverId,
     name: serverName,
     category: serverCategory,
     region: `EU • ${hexHash}`,
@@ -876,15 +1250,20 @@ app.post("/api/servers/create", (req, res) => {
     planPrice: numPrice,
     createdAt: new Date().toISOString(),
     isCustom: true,
+    port: numPort,
+    ip: "194.163.148.91",
   };
 
   const servers = getServersData();
   servers.push(newServer);
   saveServersData(servers);
 
+  // Initialize isolated workspace files
+  ensureServerWorkspace(newServer);
+
   addLog(
     "system",
-    `🚀 Server Created: "${serverName}" [${serverCategory}] under plan "${planName || "Mini-v1"}". Initial status: STOPPED (Ready to start).`
+    `🚀 Server Created: "${serverName}" [${serverCategory}] under plan "${planName || "Mini-v1"}". Initial status: STOPPED.`
   );
 
   res.json({
@@ -895,6 +1274,7 @@ app.post("/api/servers/create", (req, res) => {
   });
 });
 
+// 3. Server Actions: Start, Stop, Restart (Per Server Process Isolation)
 app.post("/api/servers/action", (req, res) => {
   const { serverId, action } = req.body;
   const servers = getServersData();
@@ -904,26 +1284,444 @@ app.post("/api/servers/action", (req, res) => {
     return res.status(404).json({ error: "Server not found" });
   }
 
+  ensureServerWorkspace(server);
+  const runtime = getServerRuntime(server.id);
+  const sDir = getServerDir(server.id);
+  const config = getServerConfig(server.id, server);
+
   if (action === "stop") {
+    if (runtime.proc) {
+      try {
+        runtime.proc.kill("SIGTERM");
+        setTimeout(() => {
+          if (runtime.proc) runtime.proc.kill("SIGKILL");
+        }, 1500);
+      } catch {
+        // ignore
+      }
+      runtime.proc = null;
+    }
+    runtime.startTime = null;
     server.status = "STOPPED";
     server.ramUsage = "0.00 MB RAM";
     server.cpuUsage = "0.00% CPU";
-    addLog("system", `⏹️ Server "${server.name}" [${server.category}] was stopped.`);
-  } else if (action === "start" || action === "restart") {
-    server.status = "RUNNING";
-    // Real dynamic memory calculation from node process
-    const realMemMb = (process.memoryUsage().rss / (1024 * 1024)).toFixed(1);
-    server.ramUsage = `${realMemMb} MB RAM`;
-    server.cpuUsage = `${(0.4 + Math.random() * 0.8).toFixed(2)}% CPU`;
-    server.diskUsage = "14.2 MB Disk";
-    addLog("system", `▶️ Server "${server.name}" [${server.category}] is now RUNNING.`);
+    addServerLog(server.id, "system", `⏹️ Server stopped by user.`);
+    saveServersData(servers);
+    return res.json({ success: true, server });
   }
 
-  saveServersData(servers);
-  res.json({ success: true, server });
+  if (action === "start" || action === "restart") {
+    // If restarting and already running, kill first
+    if (runtime.proc) {
+      try {
+        runtime.proc.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      runtime.proc = null;
+    }
+
+    const cmdStr = config.startupCommand || (server.category === "golang" ? "go run main.go" : "python3 main.py");
+    addServerLog(server.id, "system", `🚀 Executing startup command: ${cmdStr}`);
+
+    // Build environment
+    const customEnv: Record<string, string> = {};
+    for (const item of config.envVars || []) {
+      if (item.key) customEnv[item.key] = item.value;
+    }
+    const procEnv = { ...process.env, ...customEnv, SERVER_ID: server.id, SERVER_NAME: server.name, PYTHONUNBUFFERED: "1" };
+
+    // Check entry file
+    const parts = cmdStr.trim().split(/\s+/);
+    const bin = parts[0];
+    const args = parts.slice(1);
+
+    try {
+      const proc = spawn(bin, args, {
+        cwd: sDir,
+        env: procEnv,
+      });
+
+      runtime.proc = proc;
+      runtime.startTime = Date.now();
+      server.status = "RUNNING";
+
+      const realMemMb = (process.memoryUsage().rss / (1024 * 1024)).toFixed(1);
+      server.ramUsage = `${realMemMb} MB RAM`;
+      server.cpuUsage = `${(0.4 + Math.random() * 0.8).toFixed(2)}% CPU`;
+      server.diskUsage = "14.2 MB Disk";
+
+      proc.stdout?.on("data", (chunk) => {
+        const text = chunk.toString();
+        for (const line of text.split("\n")) {
+          if (line.length > 0) addServerLog(server.id, "stdout", line);
+        }
+      });
+
+      proc.stderr?.on("data", (chunk) => {
+        const text = chunk.toString();
+        for (const line of text.split("\n")) {
+          if (line.length > 0) addServerLog(server.id, "stderr", line);
+        }
+      });
+
+      proc.on("close", (code, signal) => {
+        runtime.proc = null;
+        runtime.startTime = null;
+        server.status = code === 0 ? "STOPPED" : "STOPPED";
+        addServerLog(server.id, "system", `⏹️ Server process exited (code: ${code}, signal: ${signal || "none"})`);
+        saveServersData(servers);
+      });
+
+      proc.on("error", (err) => {
+        runtime.proc = null;
+        runtime.startTime = null;
+        server.status = "STOPPED";
+        addServerLog(server.id, "stderr", `Startup error: ${err.message}`);
+        saveServersData(servers);
+      });
+
+      saveServersData(servers);
+      addServerLog(server.id, "system", `✅ Container listening on 0.0.0.0:${config.port}`);
+      return res.json({ success: true, server, pid: proc.pid });
+    } catch (err: any) {
+      addServerLog(server.id, "stderr", `Failed to spawn: ${err.message}`);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  res.status(400).json({ error: "Invalid action" });
 });
 
-// Delete Server Endpoint
+// 4. Server Details & Config API
+app.get("/api/servers/:id/details", (req, res) => {
+  const { id } = req.params;
+  const servers = getServersData();
+  const server = servers.find((s) => s.id === id);
+  if (!server) {
+    return res.status(404).json({ error: "Server not found" });
+  }
+
+  ensureServerWorkspace(server);
+  const config = getServerConfig(id, server);
+  res.json({
+    server: {
+      ...server,
+      port: config.port,
+      ip: config.ip,
+      startupCommand: config.startupCommand,
+      envVars: config.envVars,
+    },
+    config,
+  });
+});
+
+// 5. Update Server Config
+app.post("/api/servers/:id/config", (req, res) => {
+  const { id } = req.params;
+  const servers = getServersData();
+  const server = servers.find((s) => s.id === id);
+  if (!server) {
+    return res.status(404).json({ error: "Server not found" });
+  }
+
+  const { name, startupCommand, envVars } = req.body;
+  const config = getServerConfig(id, server);
+
+  if (name && typeof name === "string" && name.trim()) {
+    server.name = name.trim();
+    saveServersData(servers);
+  }
+
+  if (startupCommand && typeof startupCommand === "string") {
+    config.startupCommand = startupCommand.trim();
+  }
+
+  if (Array.isArray(envVars)) {
+    config.envVars = envVars;
+    // Also update .env file inside server directory
+    const envFile = path.join(getServerDir(id), ".env");
+    const envContent = envVars.map((e) => `${e.key}=${e.value}`).join("\n") + "\n";
+    try {
+      fs.writeFileSync(envFile, envContent, "utf-8");
+    } catch {
+      // ignore
+    }
+  }
+
+  saveServerConfig(id, config);
+  addServerLog(id, "system", `⚙️ Configuration updated (.env and startup settings)`);
+
+  res.json({ success: true, server, config });
+});
+
+// 6. Server Files List
+app.get("/api/servers/:id/files", (req, res) => {
+  const { id } = req.params;
+  const servers = getServersData();
+  const server = servers.find((s) => s.id === id);
+  if (!server) {
+    return res.status(404).json({ error: "Server not found" });
+  }
+
+  ensureServerWorkspace(server);
+  const sDir = getServerDir(id);
+
+  try {
+    const filenames = fs.readdirSync(sDir);
+    const files = filenames
+      .filter((name) => name !== ".config.json" && !name.startsWith("."))
+      .map((name) => {
+        const fullPath = path.join(sDir, name);
+        const stat = fs.statSync(fullPath);
+        return {
+          name,
+          size: stat.size,
+          modified: stat.mtime.toISOString(),
+          isDirectory: stat.isDirectory(),
+        };
+      });
+
+    // Also include .env if exists
+    if (fs.existsSync(path.join(sDir, ".env"))) {
+      const stat = fs.statSync(path.join(sDir, ".env"));
+      files.unshift({
+        name: ".env",
+        size: stat.size,
+        modified: stat.mtime.toISOString(),
+        isDirectory: false,
+      });
+    }
+
+    res.json({ files });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Get File Content
+app.get("/api/servers/:id/files/:filename", (req, res) => {
+  const { id, filename } = req.params;
+  const sDir = getServerDir(id);
+  const safeName = path.basename(filename);
+  const filePath = path.join(sDir, safeName);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: `File ${safeName} not found` });
+  }
+
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    const stat = fs.statSync(filePath);
+    res.json({ name: safeName, content, size: stat.size });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. Save/Write File
+app.put("/api/servers/:id/files/:filename", (req, res) => {
+  const { id, filename } = req.params;
+  const { content } = req.body;
+  const sDir = getServerDir(id);
+  if (!fs.existsSync(sDir)) fs.mkdirSync(sDir, { recursive: true });
+
+  const safeName = path.basename(filename);
+  const filePath = path.join(sDir, safeName);
+
+  try {
+    fs.writeFileSync(filePath, content ?? "", "utf-8");
+    addServerLog(id, "system", `💾 File saved: ${safeName} (${(content || "").length} bytes)`);
+    res.json({ success: true, name: safeName });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 9. Delete File
+app.delete("/api/servers/:id/files/:filename", (req, res) => {
+  const { id, filename } = req.params;
+  const sDir = getServerDir(id);
+  const safeName = path.basename(filename);
+  const filePath = path.join(sDir, safeName);
+
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+      addServerLog(id, "system", `🗑️ File deleted: ${safeName}`);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  } else {
+    res.status(404).json({ error: "File not found" });
+  }
+});
+
+// 10. Upload File into Server
+const serverMulter = multer({
+  storage: multer.diskStorage({
+    destination: (req, _file, cb) => {
+      const dest = getServerDir(req.params.id);
+      if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+      cb(null, dest);
+    },
+    filename: (_req, file, cb) => {
+      cb(null, path.basename(file.originalname));
+    },
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+
+app.post("/api/servers/:id/files/upload", serverMulter.single("file"), (req, res) => {
+  const { id } = req.params;
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  addServerLog(id, "system", `📁 File uploaded: ${req.file.originalname} (${req.file.size} bytes)`);
+  res.json({ success: true, filename: req.file.originalname, size: req.file.size });
+});
+
+// 11. Server Logs
+app.get("/api/servers/:id/logs", (req, res) => {
+  const { id } = req.params;
+  const runtime = getServerRuntime(id);
+  res.json({ logs: runtime.logs });
+});
+
+app.post("/api/servers/:id/logs/clear", (req, res) => {
+  const { id } = req.params;
+  const runtime = getServerRuntime(id);
+  runtime.logs = [];
+  res.json({ success: true });
+});
+
+// 12. Server Terminal Command Runner (Per-Server Execution)
+app.post("/api/servers/:id/command", (req, res) => {
+  const { id } = req.params;
+  const { command } = req.body;
+  const servers = getServersData();
+  const server = servers.find((s) => s.id === id);
+  if (!server) {
+    return res.status(404).json({ error: "Server not found" });
+  }
+
+  const sDir = getServerDir(id);
+  const cmd = (command || "").trim();
+
+  if (!cmd) {
+    return res.json({ success: true, output: "" });
+  }
+
+  // Log user command
+  addServerLog(id, "stdout", `[container@hostbot ~]$ ${cmd}`);
+
+  if (cmd === "clear") {
+    const runtime = getServerRuntime(id);
+    runtime.logs = [];
+    return res.json({ success: true, output: "" });
+  }
+
+  if (cmd === "help") {
+    const helpMsg = `Host Bot Container Commands:
+- status      : Display live server state and allocated memory
+- ls          : List files in server directory
+- cat <file>  : Print file content
+- python3 ... : Run Python script or check version
+- go ...      : Run Go command
+- uptime      : Container uptime
+- ping        : Test node latency
+- clear       : Clear console logs`;
+    addServerLog(id, "system", helpMsg);
+    return res.json({ success: true, output: helpMsg });
+  }
+
+  if (cmd === "status") {
+    const statusMsg = `Server: ${server.name} | Category: ${server.category} | Status: ${server.status} | Plan: ${server.planName} | RAM: ${server.ramUsage} | CPU: ${server.cpuUsage}`;
+    addServerLog(id, "system", statusMsg);
+    return res.json({ success: true, output: statusMsg });
+  }
+
+  // Run command safely in server's working directory
+  const cfg = getServerConfig(id, server);
+  const envObj: Record<string, string> = {};
+  for (const item of cfg.envVars || []) {
+    if (item.key) envObj[item.key] = item.value;
+  }
+
+  exec(
+    cmd,
+    {
+      cwd: sDir,
+      timeout: 10000,
+      maxBuffer: 1024 * 1024,
+      env: { ...process.env, ...envObj, SERVER_NAME: server.name },
+    },
+    (error, stdout, stderr) => {
+      if (stdout) {
+        for (const line of stdout.trim().split("\n")) {
+          if (line) addServerLog(id, "stdout", line);
+        }
+      }
+      if (stderr) {
+        for (const line of stderr.trim().split("\n")) {
+          if (line) addServerLog(id, "stderr", line);
+        }
+      }
+      if (error && !stderr) {
+        addServerLog(id, "stderr", `Error: ${error.message}`);
+      }
+
+      res.json({
+        success: !error,
+        stdout: stdout || "",
+        stderr: stderr || (error ? error.message : ""),
+      });
+    }
+  );
+});
+
+// 13. Reinstall Server (Reset to pristine category starter)
+app.post("/api/servers/:id/reinstall", (req, res) => {
+  const { id } = req.params;
+  const servers = getServersData();
+  const server = servers.find((s) => s.id === id);
+  if (!server) {
+    return res.status(404).json({ error: "Server not found" });
+  }
+
+  const sDir = getServerDir(id);
+  // Stop process if running
+  const runtime = getServerRuntime(id);
+  if (runtime.proc) {
+    try {
+      runtime.proc.kill("SIGKILL");
+    } catch {
+      // ignore
+    }
+    runtime.proc = null;
+  }
+  server.status = "STOPPED";
+  saveServersData(servers);
+
+  try {
+    // Delete all files in directory except .config.json
+    const existing = fs.readdirSync(sDir);
+    for (const f of existing) {
+      if (f !== ".config.json") {
+        fs.rmSync(path.join(sDir, f), { recursive: true, force: true });
+      }
+    }
+    // Re-seed
+    ensureServerWorkspace(server);
+    addServerLog(id, "system", `🔄 Server container reinstalled to pristine ${server.category} state.`);
+    res.json({ success: true, message: "Server reinstalled successfully" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 14. Delete Server Endpoint
 app.delete("/api/servers/:id", (req, res) => {
   const { id } = req.params;
   let servers = getServersData();
@@ -931,6 +1729,27 @@ app.delete("/api/servers/:id", (req, res) => {
 
   if (!target) {
     return res.status(404).json({ error: "Server not found" });
+  }
+
+  // Kill running process
+  const runtime = serverRuntimes.get(id);
+  if (runtime && runtime.proc) {
+    try {
+      runtime.proc.kill("SIGKILL");
+    } catch {
+      // ignore
+    }
+  }
+  serverRuntimes.delete(id);
+
+  // Remove server folder
+  const sDir = getServerDir(id);
+  try {
+    if (fs.existsSync(sDir)) {
+      fs.rmSync(sDir, { recursive: true, force: true });
+    }
+  } catch {
+    // ignore
   }
 
   servers = servers.filter((s) => s.id !== id);

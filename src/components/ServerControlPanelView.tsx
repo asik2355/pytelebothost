@@ -38,22 +38,28 @@ export type ControlPanelTab =
 
 interface ServerControlPanelViewProps {
   server: ActiveServer;
+  allServers?: ActiveServer[];
+  onSelectServer?: (server: ActiveServer) => void;
   lang: "bn" | "en";
   onBackToDetails: () => void;
   onBackToServers: () => void;
   onServerAction: (serverId: string, action: "start" | "stop" | "restart") => Promise<void>;
   onDeleteServer?: (serverId: string, serverName: string) => Promise<void>;
   onAddNotification?: (notif: AppNotification) => void;
+  onServerUpdated?: () => void;
 }
 
 export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   server,
+  allServers,
+  onSelectServer,
   lang,
   onBackToDetails,
   onBackToServers,
   onServerAction,
   onDeleteServer,
   onAddNotification,
+  onServerUpdated,
 }) => {
   const [activeTab, setActiveTab] = useState<ControlPanelTab>("Console");
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -71,21 +77,25 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const [isSavingFile, setIsSavingFile] = useState(false);
   const [isNewFileModal, setIsNewFileModal] = useState(false);
   const [newFileName, setNewFileName] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   // Startup State
-  const [startupCmd, setStartupCmd] = useState("python3 bot.py");
+  const [startupCmd, setStartupCmd] = useState(server.startupCommand || (server.category === "golang" ? "go run main.go" : "python3 main.py"));
   const [isSavingStartup, setIsSavingStartup] = useState(false);
-  const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([
-    { key: "BOT_TOKEN", value: "7129849204:AAF-x9q..." },
-    { key: "PYTHONUNBUFFERED", value: "1" },
-    { key: "NODE_ENV", value: "production" },
-  ]);
+  const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>(
+    server.envVars || [
+      { key: "SERVER_NAME", value: server.name },
+      { key: "PORT", value: (server.port || 25565).toString() },
+      { key: "PYTHONUNBUFFERED", value: "1" },
+    ]
+  );
   const [newEnvKey, setNewEnvKey] = useState("");
   const [newEnvVal, setNewEnvVal] = useState("");
 
   // Settings State
   const [serverNameInput, setServerNameInput] = useState(server.name);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isReinstalling, setIsReinstalling] = useState(false);
 
   // Activity Log State
   const [activities, setActivities] = useState<
@@ -93,45 +103,42 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   >([
     {
       id: "act-1",
-      action: "Server was restarted via Control Panel",
-      user: "Root Owner",
-      ip: "103.144.17.202",
-      time: "Just now",
-      type: "start",
-    },
-    {
-      id: "act-2",
-      action: "Configuration updated (.env and startup command)",
-      user: "Root Owner",
-      ip: "103.144.17.202",
-      time: "15 minutes ago",
-      type: "config",
-    },
-    {
-      id: "act-3",
-      action: "File saved: bot.py (2.4 KB)",
-      user: "Root Owner",
-      ip: "103.144.17.202",
-      time: "1 hour ago",
-      type: "file",
-    },
-    {
-      id: "act-4",
-      action: "Initial server provisioning completed on node EU-01",
+      action: `Container mounted on node EU-01 for server ${server.name}`,
       user: "System Daemon",
       ip: "127.0.0.1",
-      time: "1 day ago",
+      time: "Initial",
       type: "config",
     },
   ]);
 
   const isRunning = server.status === "RUNNING";
   const uuid = (server.region.split("•")[1] || server.id.replace(/[^a-zA-Z0-9]/g, "").slice(-8)).trim();
+  const assignedPort = server.port || 25565;
+  const assignedIp = server.ip || "194.163.148.91";
 
-  // Fetch initial logs
+  // Fetch per-server details & config
+  const fetchServerDetails = async () => {
+    try {
+      const res = await fetch(`/api/servers/${server.id}/details`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.config) {
+          if (data.config.startupCommand) setStartupCmd(data.config.startupCommand);
+          if (Array.isArray(data.config.envVars)) setEnvVars(data.config.envVars);
+          if (Array.isArray(data.config.activities) && data.config.activities.length > 0) {
+            setActivities(data.config.activities);
+          }
+        }
+      }
+    } catch {
+      // fallback
+    }
+  };
+
+  // Fetch per-server logs
   const fetchLogs = async () => {
     try {
-      const res = await fetch("/api/bot/logs");
+      const res = await fetch(`/api/servers/${server.id}/logs`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.logs)) {
@@ -143,17 +150,24 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     }
   };
 
-  // Fetch files
+  // Fetch per-server files
   const fetchFiles = async () => {
     try {
-      const res = await fetch("/api/workspace");
+      const res = await fetch(`/api/servers/${server.id}/files`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.files)) {
           setFiles(data.files);
-          if (!selectedFile && data.files.length > 0) {
-            setSelectedFile(data.files[0].name);
-            loadFileContent(data.files[0].name);
+          if (data.files.length > 0) {
+            setSelectedFile((prev) => {
+              const stillExists = data.files.some((f: any) => f.name === prev);
+              const nextFile = stillExists && prev ? prev : data.files[0].name;
+              loadFileContent(nextFile);
+              return nextFile;
+            });
+          } else {
+            setSelectedFile(null);
+            setFileContent("");
           }
         }
       }
@@ -164,22 +178,26 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
   const loadFileContent = async (filename: string) => {
     try {
-      const res = await fetch(`/api/files/${encodeURIComponent(filename)}`);
+      const res = await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(filename)}`);
       if (res.ok) {
         const data = await res.json();
-        setFileContent(data.content || "");
+        setFileContent(data.content ?? "");
       }
     } catch {
       // ignore
     }
   };
 
+  // Re-sync whenever server.id changes
   useEffect(() => {
+    setServerNameInput(server.name);
+    setStartupCmd(server.startupCommand || (server.category === "golang" ? "go run main.go" : "python3 main.py"));
+    fetchServerDetails();
     fetchLogs();
     fetchFiles();
-    const interval = setInterval(fetchLogs, 3000);
+    const interval = setInterval(fetchLogs, 2500);
     return () => clearInterval(interval);
-  }, []);
+  }, [server.id]);
 
   useEffect(() => {
     if (activeTab === "Console") {
@@ -191,10 +209,9 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     setIsActionLoading(true);
     try {
       await onServerAction(server.id, action);
-      // Append an activity log
       const newAct = {
         id: `act-${Date.now()}`,
-        action: `Server was ${action === "start" ? "started" : action === "stop" ? "stopped" : "restarted"}`,
+        action: `Server [${server.name}] was ${action === "start" ? "started" : action === "stop" ? "stopped" : "restarted"}`,
         user: "Root Owner",
         ip: "103.144.17.202",
         time: "Just now",
@@ -207,56 +224,40 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     }
   };
 
-  const handleSendCommand = (e?: React.FormEvent) => {
+  const handleSendCommand = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const cmd = commandInput.trim();
     if (!cmd) return;
+    setCommandInput("");
 
-    // Simulate real command execution in console
+    // Optimistic log in UI
     const newLog: BotLog = {
       id: Date.now(),
       type: "stdout",
-      message: `[user@pterodactyl:~]$ ${cmd}`,
-      timestamp: new Date().toLocaleTimeString(),
+      message: `[container@hostbot ~]$ ${cmd}`,
+      timestamp: new Date().toLocaleTimeString("en-US", { hour12: false }),
     };
+    setLogs((prev) => [...prev, newLog]);
 
-    let replyLog: BotLog | null = null;
-    if (cmd === "help") {
-      replyLog = {
-        id: Date.now() + 1,
-        type: "system",
-        message: "Available commands: status, ping, uptime, python, pip list, restart, stop, clear",
-        timestamp: new Date().toLocaleTimeString(),
-      };
-    } else if (cmd === "status") {
-      replyLog = {
-        id: Date.now() + 1,
-        type: "system",
-        message: `Server "${server.name}" [UUID: ${uuid}] is currently ${server.status}. Memory: ${server.ramUsage}, CPU: ${server.cpuUsage}`,
-        timestamp: new Date().toLocaleTimeString(),
-      };
-    } else if (cmd === "clear") {
-      setLogs([]);
-      setCommandInput("");
-      return;
-    } else {
-      replyLog = {
-        id: Date.now() + 1,
-        type: "stdout",
-        message: `Command "${cmd}" received and processed successfully.`,
-        timestamp: new Date().toLocaleTimeString(),
-      };
+    try {
+      const res = await fetch(`/api/servers/${server.id}/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: cmd }),
+      });
+      if (res.ok) {
+        await fetchLogs();
+      }
+    } catch {
+      // ignore
     }
-
-    setLogs((prev) => [...prev, newLog, ...(replyLog ? [replyLog] : [])]);
-    setCommandInput("");
   };
 
   const handleSaveFile = async () => {
     if (!selectedFile) return;
     setIsSavingFile(true);
     try {
-      const res = await fetch(`/api/files/${encodeURIComponent(selectedFile)}`, {
+      const res = await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(selectedFile)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: fileContent }),
@@ -266,8 +267,8 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           id: `file-save-${Date.now()}`,
           title: "File Saved",
           titleBn: "ফাইল সংরক্ষণ হয়েছে",
-          desc: `File "${selectedFile}" updated in server container.`,
-          descBn: `ফাইল "${selectedFile}" সফলভাবে সেভ করা হয়েছে।`,
+          desc: `File "${selectedFile}" updated in ${server.name}.`,
+          descBn: `ফাইল "${selectedFile}" সার্ভার ${server.name}-এ সেভ হয়েছে।`,
           timestamp: new Date().toISOString(),
           type: "system",
           read: false,
@@ -275,7 +276,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
         setActivities((prev) => [
           {
             id: `act-${Date.now()}`,
-            action: `File saved: ${selectedFile}`,
+            action: `File saved: ${selectedFile} in ${server.name}`,
             user: "Root Owner",
             ip: "103.144.17.202",
             time: "Just now",
@@ -289,20 +290,80 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     }
   };
 
+  const handleDeleteFile = async (filename: string) => {
+    if (!confirm(lang === "bn" ? `আপনি কি নিশ্চিত যে "${filename}" ফাইলটি ডিলিট করতে চান?` : `Are you sure you want to delete "${filename}"?`)) return;
+    try {
+      const res = await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(filename)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await fetchFiles();
+        if (selectedFile === filename) {
+          setSelectedFile(null);
+          setFileContent("");
+        }
+        onAddNotification?.({
+          id: `del-file-${Date.now()}`,
+          title: "File Deleted",
+          titleBn: "ফাইল ডিলিট হয়েছে",
+          desc: `Deleted ${filename} from ${server.name}.`,
+          descBn: `${server.name} থেকে ${filename} ডিলিট করা হয়েছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/files/upload`, {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        await fetchFiles();
+        setSelectedFile(file.name);
+        loadFileContent(file.name);
+        onAddNotification?.({
+          id: `upload-${Date.now()}`,
+          title: "File Uploaded",
+          titleBn: "ফাইল আপলোড হয়েছে",
+          desc: `Uploaded ${file.name} to ${server.name}.`,
+          descBn: `${file.name} সার্ভার ${server.name}-এ আপলোড হয়েছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+      }
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
+  };
+
   const handleCreateNewFile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFileName.trim()) return;
     const cleanName = newFileName.trim();
 
     try {
-      await fetch(`/api/files/${encodeURIComponent(cleanName)}`, {
+      await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(cleanName)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "# New script file\n" }),
+        body: JSON.stringify({ content: `# New file for ${server.name}\n` }),
       });
       await fetchFiles();
       setSelectedFile(cleanName);
-      setFileContent("# New script file\n");
+      setFileContent(`# New file for ${server.name}\n`);
       setIsNewFileModal(false);
       setNewFileName("");
     } catch {
@@ -315,6 +376,100 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     navigator.clipboard.writeText(text);
     setIsCopiedLogs(true);
     setTimeout(() => setIsCopiedLogs(false), 2000);
+  };
+
+  const handleClearLogs = async () => {
+    try {
+      await fetch(`/api/servers/${server.id}/logs/clear`, { method: "POST" });
+      setLogs([]);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSaveStartup = async () => {
+    setIsSavingStartup(true);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startupCommand: startupCmd,
+          envVars,
+        }),
+      });
+      if (res.ok) {
+        onAddNotification?.({
+          id: `startup-${Date.now()}`,
+          title: "Startup Command Updated",
+          titleBn: "স্টার্টআপ কমান্ড আপডেট হয়েছে",
+          desc: `Startup configuration saved for ${server.name}.`,
+          descBn: `${server.name} এর স্টার্টআপ কনফিগারেশন সংরক্ষণ করা হয়েছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+        onServerUpdated?.();
+      }
+    } finally {
+      setIsSavingStartup(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: serverNameInput }),
+      });
+      if (res.ok) {
+        onAddNotification?.({
+          id: `ren-${Date.now()}`,
+          title: "Server Renamed",
+          titleBn: "সার্ভারের নাম পরিবর্তিত হয়েছে",
+          desc: `Server name set to ${serverNameInput}`,
+          descBn: `সার্ভারটির নতুন নাম সংরক্ষণ করা হয়েছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+        onServerUpdated?.();
+      }
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleReinstallServer = async () => {
+    const confirmMsg =
+      lang === "bn"
+        ? `আপনি কি নিশ্চিত যে "${server.name}" সার্ভারটি রি-ইনস্টল করতে চান? সব কাস্টম ফাইল মুছে যাবে।`
+        : `Are you sure you want to reinstall "${server.name}"? All custom files will be restored to defaults.`;
+    if (!confirm(confirmMsg)) return;
+
+    setIsReinstalling(true);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/reinstall`, { method: "POST" });
+      if (res.ok) {
+        await fetchFiles();
+        await fetchLogs();
+        onAddNotification?.({
+          id: `reinstall-${Date.now()}`,
+          title: "Server Reinstalled",
+          titleBn: "সার্ভার রি-ইনস্টল সম্পন্ন",
+          desc: `Server ${server.name} reinstalled to pristine ${server.category} state.`,
+          descBn: `${server.name} সফলভাবে রি-ইনস্টল হয়েছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+        onServerUpdated?.();
+      }
+    } finally {
+      setIsReinstalling(false);
+    }
   };
 
   const tabs: ControlPanelTab[] = [
@@ -351,13 +506,35 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           <span className="text-[#a78bfa] font-medium">Control Panel</span>
         </div>
 
-        <button
-          onClick={onBackToDetails}
-          className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700/60"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>{lang === "bn" ? "ডিটেইলস পেইজ" : "Back to Details"}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {allServers && allServers.length > 1 && (
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs">
+              <span className="text-slate-400 font-medium">{lang === "bn" ? "সার্ভার:" : "Server:"}</span>
+              <select
+                value={server.id}
+                onChange={(e) => {
+                  const s = allServers.find((srv) => srv.id === e.target.value);
+                  if (s && onSelectServer) onSelectServer(s);
+                }}
+                className="bg-transparent text-purple-300 font-semibold cursor-pointer focus:outline-hidden"
+              >
+                {allServers.map((srv) => (
+                  <option key={srv.id} value={srv.id} className="bg-[#182035] text-white">
+                    {srv.name} ({srv.category}) [{srv.status}]
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <button
+            onClick={onBackToDetails}
+            className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700/60"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>{lang === "bn" ? "ডিটেইলস পেইজ" : "Back to Details"}</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. Top Navigation Tabs matching Screenshot 3 */}
@@ -517,7 +694,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLogs([])}
+                  onClick={handleClearLogs}
                   className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition-colors cursor-pointer"
                 >
                   Clear
@@ -529,7 +706,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
             <div className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-1.5 bg-[#080c14] text-slate-300 selection:bg-purple-900">
               {logs.length === 0 ? (
                 <div className="text-slate-600 italic py-6 text-center">
-                  [Container Initialized] Waiting for server logs. Type "help" or "status" below...
+                  [Container Initialized for {server.name}] Waiting for server logs. Type "help" or run a command below...
                 </div>
               ) : (
                 logs.map((log) => {
@@ -556,7 +733,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                 type="text"
                 value={commandInput}
                 onChange={(e) => setCommandInput(e.target.value)}
-                placeholder="Type a command (e.g. status, ping, python bot.py, clear)..."
+                placeholder="Type a command (e.g. ls, cat main.py, uptime, clear)..."
                 className="flex-1 bg-transparent border-0 text-white font-mono text-xs focus:ring-0 focus:outline-hidden placeholder:text-slate-600"
               />
               <button
@@ -577,11 +754,16 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
               <FolderOpen className="w-4 h-4 text-purple-400" />
-              <span>/home/container/</span>
+              <span>/home/container/user_servers/{server.id}/</span>
               {selectedFile && <span className="text-white font-bold">{selectedFile}</span>}
             </div>
 
             <div className="flex items-center gap-2">
+              <label className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700">
+                {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-purple-400" />}
+                <span>Upload</span>
+                <input type="file" onChange={handleUploadFile} className="hidden" />
+              </label>
               <button
                 onClick={() => setIsNewFileModal(true)}
                 className="px-3 py-1.5 rounded-lg bg-[#5438dc] hover:bg-[#6344f0] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -603,57 +785,74 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* File List */}
             <div className="bg-[#182035] border border-slate-800 rounded-2xl p-3 space-y-1">
-              <div className="text-[11px] font-bold text-slate-400 uppercase px-3 py-2 border-b border-slate-800/80 mb-1">
-                Workspace Files ({files.length})
+              <div className="text-[11px] font-bold text-slate-400 uppercase px-3 py-2 border-b border-slate-800/80 mb-1 flex items-center justify-between">
+                <span>Workspace Files ({files.length})</span>
+                <span className="text-[10px] text-purple-400 font-normal">server: {server.name}</span>
               </div>
               <div className="max-h-[420px] overflow-y-auto space-y-1 pr-1">
-                {files.map((file) => {
-                  const isSelected = selectedFile === file.name;
-                  return (
-                    <button
-                      key={file.name}
-                      onClick={() => {
-                        setSelectedFile(file.name);
-                        loadFileContent(file.name);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-mono transition-all text-left cursor-pointer ${
-                        isSelected
-                          ? "bg-purple-600/30 text-white border border-purple-500/40"
-                          : "text-slate-300 hover:bg-slate-800/60"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 truncate">
-                        {file.name.endsWith(".py") ? (
-                          <FileCode className="w-4 h-4 text-yellow-400 shrink-0" />
-                        ) : (
-                          <FileText className="w-4 h-4 text-sky-400 shrink-0" />
-                        )}
-                        <span className="truncate">{file.name}</span>
-                      </div>
-                      <span className="text-[10px] text-slate-500 shrink-0 ml-2">
-                        {(file.size / 1024).toFixed(1)} KB
-                      </span>
-                    </button>
-                  );
-                })}
+                {files.length === 0 ? (
+                  <div className="text-slate-500 italic text-xs py-8 text-center">
+                    No files found. Click "New File" or "Upload".
+                  </div>
+                ) : (
+                  files.map((file) => {
+                    const isSelected = selectedFile === file.name;
+                    return (
+                      <button
+                        key={file.name}
+                        onClick={() => {
+                          setSelectedFile(file.name);
+                          loadFileContent(file.name);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-mono transition-all text-left cursor-pointer ${
+                          isSelected
+                            ? "bg-purple-600/30 text-white border border-purple-500/40"
+                            : "text-slate-300 hover:bg-slate-800/60"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          {file.name.endsWith(".py") || file.name.endsWith(".go") || file.name.endsWith(".js") ? (
+                            <FileCode className="w-4 h-4 text-yellow-400 shrink-0" />
+                          ) : (
+                            <FileText className="w-4 h-4 text-sky-400 shrink-0" />
+                          )}
+                          <span className="truncate">{file.name}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 shrink-0 ml-2">
+                          {(file.size / 1024).toFixed(1)} KB
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
 
             {/* Code Editor */}
             <div className="lg:col-span-2 bg-[#0b0f19] border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[460px]">
               <div className="bg-[#121829] px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
-                <span className="font-mono text-xs font-bold text-purple-300">
+                <span className="font-mono text-xs font-bold text-purple-300 truncate max-w-[200px] sm:max-w-md">
                   {selectedFile || "Select a file to edit"}
                 </span>
                 {selectedFile && (
-                  <button
-                    onClick={handleSaveFile}
-                    disabled={isSavingFile}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {isSavingFile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                    <span>Save File</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDeleteFile(selectedFile)}
+                      className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Delete File"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Delete</span>
+                    </button>
+                    <button
+                      onClick={handleSaveFile}
+                      disabled={isSavingFile}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingFile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      <span>Save File</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -718,7 +917,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                   <span>Network Allocations</span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Assigned IP addresses and port bindings for this container.
+                  Dedicated IP address and port bindings for {server.name}.
                 </p>
               </div>
               <span className="px-2.5 py-1 rounded-md bg-purple-950/80 border border-purple-600/40 text-purple-300 text-xs font-mono">
@@ -735,9 +934,9 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               <div className="px-4 py-3.5 flex items-center justify-between text-slate-200">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span className="font-bold">154.26.13.44:25565</span>
+                  <span className="font-bold">{assignedIp}:{assignedPort}</span>
                 </div>
-                <span className="text-slate-400">node-eu-01.botrunner.cloud:25565</span>
+                <span className="text-slate-400">node-eu-01.hostbot.cloud:{assignedPort}</span>
                 <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 text-[10px] font-bold">
                   PRIMARY
                 </span>
@@ -745,9 +944,9 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               <div className="px-4 py-3.5 flex items-center justify-between text-slate-200">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-slate-500" />
-                  <span>154.26.13.44:8080</span>
+                  <span>{assignedIp}:{assignedPort + 1000}</span>
                 </div>
-                <span className="text-slate-400">node-eu-01.botrunner.cloud:8080</span>
+                <span className="text-slate-400">node-eu-01.hostbot.cloud:{assignedPort + 1000}</span>
                 <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">
                   HTTP WEBHOOK
                 </span>
@@ -763,14 +962,14 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                 <span>SFTP File Transfer Details</span>
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Connect using FileZilla, Cyberduck, or WinSCP to upload large bot packages.
+                Connect using FileZilla, Cyberduck, or WinSCP to upload large bot packages directly to this server.
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
               <div className="bg-[#0b0f19] border border-slate-800 rounded-xl p-3 space-y-1">
                 <span className="text-slate-500 block text-[10px] uppercase">SERVER ADDRESS</span>
-                <span className="text-white font-bold truncate block">node-eu-01.botrunner.cloud</span>
+                <span className="text-white font-bold truncate block">node-eu-01.hostbot.cloud</span>
               </div>
               <div className="bg-[#0b0f19] border border-slate-800 rounded-xl p-3 space-y-1">
                 <span className="text-slate-500 block text-[10px] uppercase">SFTP PORT</span>
@@ -793,7 +992,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
             <div>
               <h2 className="text-base font-bold text-white">Startup Command</h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                The command executed by the container daemon when starting your server.
+                The command executed by the container daemon when starting {server.name}.
               </p>
             </div>
 
@@ -805,24 +1004,9 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                 className="flex-1 bg-[#0b0f19] border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-xs focus:border-purple-500 focus:outline-hidden"
               />
               <button
-                onClick={() => {
-                  setIsSavingStartup(true);
-                  setTimeout(() => {
-                    setIsSavingStartup(false);
-                    onAddNotification?.({
-                      id: `startup-${Date.now()}`,
-                      title: "Startup Command Updated",
-                      titleBn: "স্টার্টআপ কমান্ড আপডেট হয়েছে",
-                      desc: `Startup command set to: ${startupCmd}`,
-                      descBn: `স্টার্টআপ কমান্ড সংরক্ষণ করা হয়েছে।`,
-                      timestamp: new Date().toISOString(),
-                      type: "system",
-                      read: false,
-                    });
-                  }, 500);
-                }}
+                onClick={handleSaveStartup}
                 disabled={isSavingStartup}
-                className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
               >
                 {isSavingStartup ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                 <span>Save</span>
@@ -830,13 +1014,13 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
             </div>
 
             <div className="bg-[#121829] border border-slate-800 rounded-xl p-3 text-xs text-slate-400">
-              Docker Image: <span className="font-mono text-purple-300">ghcr.io/pterodactyl/yolks:python_3.11</span>
+              Container Runtime: <span className="font-mono text-purple-300">{server.category} (isolated container)</span>
             </div>
           </div>
 
           {/* Environment Variables */}
           <div className="bg-[#182035] border border-slate-800 rounded-2xl p-5 space-y-4">
-            <h2 className="text-base font-bold text-white">Environment Variables</h2>
+            <h2 className="text-base font-bold text-white">Environment Variables (.env)</h2>
             <div className="space-y-2">
               {envVars.map((env, idx) => (
                 <div key={idx} className="flex items-center gap-2">
@@ -886,7 +1070,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                   setNewEnvKey("");
                   setNewEnvVal("");
                 }}
-                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold"
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
               >
                 Add
               </button>
@@ -916,26 +1100,11 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                     className="flex-1 bg-[#0b0f19] border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-xs focus:border-purple-500 focus:outline-hidden"
                   />
                   <button
-                    onClick={() => {
-                      setIsSavingSettings(true);
-                      setTimeout(() => {
-                        setIsSavingSettings(false);
-                        onAddNotification?.({
-                          id: `ren-${Date.now()}`,
-                          title: "Server Renamed",
-                          titleBn: "সার্ভারের নাম পরিবর্তিত হয়েছে",
-                          desc: `Server name set to ${serverNameInput}`,
-                          descBn: `সার্ভারটির নতুন নাম সংরক্ষণ করা হয়েছে।`,
-                          timestamp: new Date().toISOString(),
-                          type: "system",
-                          read: false,
-                        });
-                      }, 500);
-                    }}
+                    onClick={handleSaveSettings}
                     disabled={isSavingSettings}
-                    className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
                   >
-                    Save Name
+                    {isSavingSettings ? "Saving..." : "Save Name"}
                   </button>
                 </div>
               </div>
@@ -953,6 +1122,29 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
             </div>
           </div>
 
+          {/* Maintenance: Reinstall Server */}
+          <div className="bg-amber-950/20 border border-amber-900/40 rounded-2xl p-5 space-y-3">
+            <div className="flex items-start gap-3">
+              <RefreshCw className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-bold text-amber-300">Reinstall Server Container</h3>
+                <p className="text-xs text-amber-200/80 mt-1 leading-relaxed">
+                  Resets this server's workspace to the pristine default starter template for {server.category}. All custom code files will be restored to default.
+                </p>
+              </div>
+            </div>
+            <div className="pt-1">
+              <button
+                onClick={handleReinstallServer}
+                disabled={isReinstalling}
+                className="px-4 py-2 rounded-xl bg-amber-600/80 hover:bg-amber-600 text-white font-semibold text-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isReinstalling ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                <span>{isReinstalling ? "Reinstalling..." : "Reinstall Server"}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Danger Zone: Delete Server */}
           <div className="bg-red-950/20 border border-red-900/50 rounded-2xl p-5 space-y-4">
             <div className="flex items-start gap-3">
@@ -960,7 +1152,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               <div>
                 <h3 className="text-base font-bold text-red-300">Danger Zone: Delete Server</h3>
                 <p className="text-xs text-red-200/80 mt-1 leading-relaxed">
-                  Permanently deletes this server instance, stops all running processes, and frees allocated disk storage. This action cannot be reversed.
+                  Permanently deletes this server instance, stops its running process, and frees allocated disk storage. This action cannot be reversed.
                 </p>
               </div>
             </div>

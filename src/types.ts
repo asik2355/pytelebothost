@@ -70,5 +70,9 @@ export interface ActiveServer {
   planPrice: number;
   createdAt: string;
   isCustom?: boolean;
+  port?: number;
+  ip?: string;
+  startupCommand?: string;
+  envVars?: Array<{ key: string; value: string }>;
 }
 

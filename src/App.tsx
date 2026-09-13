@@ -516,6 +516,8 @@ export default function App() {
           isViewingControlPanel ? (
             <ServerControlPanelView
               server={selectedServer}
+              allServers={servers}
+              onSelectServer={(srv) => setSelectedServerId(srv.id)}
               lang={lang}
               onBackToDetails={() => setIsViewingControlPanel(false)}
               onBackToServers={() => {
@@ -526,6 +528,7 @@ export default function App() {
               onServerAction={handleServerAction}
               onDeleteServer={handleDeleteServer}
               onAddNotification={handleAddNotification}
+              onServerUpdated={fetchServers}
             />
           ) : (
             <ServerDetailView
