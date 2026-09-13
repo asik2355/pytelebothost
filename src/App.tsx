@@ -1,19 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { TopBanner } from "./components/TopBanner";
-import { Header } from "./components/Header";
-import { TokenCard } from "./components/TokenCard";
-import { FileUploader } from "./components/FileUploader";
-import { FileEditor } from "./components/FileEditor";
-import { TerminalLogs } from "./components/TerminalLogs";
-import { TemplateSelector } from "./components/TemplateSelector";
-import { EnvManager } from "./components/EnvManager";
 import { BottomNav, NavRoute } from "./components/BottomNav";
 import { HomePageView } from "./components/HomePageView";
 import { ServicesPageView } from "./components/ServicesPageView";
 import { BillingPageView } from "./components/BillingPageView";
 import { BotStorePageView } from "./components/BotStorePageView";
+import { MyServersPageView } from "./components/MyServersPageView";
 import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification, ActiveServer } from "./types";
-import { AlertTriangle, Play, HelpCircle, BookOpen, Bot } from "lucide-react";
 
 export default function App() {
   const [lang, setLang] = useState<"bn" | "en">("en");
@@ -22,7 +15,6 @@ export default function App() {
   const [token, setToken] = useState<string>("");
   const [botProfile, setBotProfile] = useState<TelegramBotProfile | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"workspace" | "env" | "templates">("workspace");
   const [walletBalance, setWalletBalance] = useState<number>(117.50);
   const [servers, setServers] = useState<ActiveServer[]>([]);
 
@@ -71,12 +63,13 @@ export default function App() {
     setNotifications([]);
   }, []);
 
-  // Router state: HOME, SERVICES, BILLING, BOT STORE
+  // Router state: HOME, SERVICES, BILLING, BOT STORE, MY SERVERS
   const [currentRoute, setCurrentRoute] = useState<NavRoute>(() => {
     const path = window.location.pathname;
     if (path === "/services" || path === "/service") return "/services";
     if (path === "/billing") return "/billing";
     if (path === "/bot-store") return "/bot-store";
+    if (path === "/my-servers") return "/my-servers";
     return "/home";
   });
 
@@ -86,6 +79,7 @@ export default function App() {
     if (route === "/services" || route === "/service") normalized = "/services";
     else if (route === "/billing") normalized = "/billing";
     else if (route === "/bot-store") normalized = "/bot-store";
+    else if (route === "/my-servers") normalized = "/my-servers";
     else normalized = "/home";
 
     setCurrentRoute(normalized);
@@ -105,6 +99,7 @@ export default function App() {
       if (path === "/services" || path === "/service") setCurrentRoute("/services");
       else if (path === "/billing") setCurrentRoute("/billing");
       else if (path === "/bot-store") setCurrentRoute("/bot-store");
+      else if (path === "/my-servers") setCurrentRoute("/my-servers");
       else setCurrentRoute("/home");
     };
 
@@ -436,148 +431,23 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-5 pb-24">
         {/* Route 1: HOME (Dashboard & Active Servers matching user design) */}
         {currentRoute === "/home" && (
-          <div className="space-y-6">
-            <HomePageView
-              status={status}
-              botProfile={botProfile}
-              lang={lang}
-              onNavigate={navigateTo}
-              onStartBot={handleStartBot}
-              onStopBot={handleStopBot}
-              onRestartBot={handleRestartBot}
-              onInstallReqs={handleInstallReqs}
-              isActionLoading={isActionLoading}
-              walletBalance={walletBalance}
-              onWalletUpdated={(bal) => setWalletBalance(bal)}
-              onAddNotification={handleAddNotification}
-              servers={servers}
-              onServerCreated={handleServerCreated}
-              onRefreshServers={fetchServers}
-            />
-
-            {/* Direct Bot Runner Workspace */}
-            <div id="bot-workspace-runner" className="space-y-5 pt-4 border-t border-slate-200/80 mt-6">
-              {/* Token Alert if not configured */}
-              {!token && !status?.hasToken && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 shadow-2xs">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="text-sm font-semibold text-amber-900">
-                      {lang === "bn"
-                        ? "টেলিগ্রাম বট টোকেন প্রয়োজন"
-                        : "Telegram Bot Token Required"}
-                    </h3>
-                    <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-                      {lang === "bn"
-                        ? "আপনার বট টেলিগ্রাম নেটওয়ার্কে সংযুক্ত করার জন্য BotFather থেকে প্রাপ্ত BOT_TOKEN নিচে প্রবেশ করিয়ে সেভ করুন।"
-                        : "To connect your bot to Telegram, enter and save your BOT_TOKEN below."}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Telegram Bot Token Card */}
-              <TokenCard
-                token={token}
-                lang={lang}
-                onSaveToken={saveToken}
-                onVerifyToken={verifyToken}
-                botProfile={botProfile}
-              />
-
-              {/* Action / Mode Tabs */}
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActiveTab("workspace")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      activeTab === "workspace"
-                        ? "bg-sky-600 text-white shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                    }`}
-                  >
-                    {lang === "bn" ? "ফাইল ও লাইভ কনসোল" : "Files & Live Console"}
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("templates")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      activeTab === "templates"
-                        ? "bg-sky-600 text-white shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                    }`}
-                  >
-                    {lang === "bn" ? "রেডিমেড বট টেমপ্লেট" : "Ready Templates"}
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("env")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      activeTab === "env"
-                        ? "bg-sky-600 text-white shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                    }`}
-                  >
-                    {lang === "bn" ? "এনভায়রনমেন্ট ভ্যারিয়েবল (.env)" : "Environment (.env)"}
-                  </button>
-                </div>
-
-                {/* Quick running status pill */}
-                <div className="hidden sm:flex items-center gap-2 text-xs">
-                  <span className="text-slate-500">{lang === "bn" ? "প্রধান এন্ট্রি:" : "Entry file:"}</span>
-                  <span className="font-mono font-semibold bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700">
-                    {status?.currentEntryFile || "bot.py"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Tab 1: Workspace Files & Live Terminal */}
-              {activeTab === "workspace" && (
-                <div className="space-y-5">
-                  {/* File Uploader */}
-                  <FileUploader lang={lang} onFilesUploaded={fetchWorkspace} />
-
-                  {/* Editor & Terminal split layout */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                    {/* File Manager & Code Editor */}
-                    <FileEditor
-                      files={status?.files || []}
-                      currentEntryFile={status?.currentEntryFile || "bot.py"}
-                      lang={lang}
-                      onSelectEntryFile={handleSelectEntryFile}
-                      onFileSaved={fetchWorkspace}
-                    />
-
-                    {/* Live Terminal Console */}
-                    <TerminalLogs
-                      logs={logs}
-                      lang={lang}
-                      onClearLogs={handleClearLogs}
-                      status={status?.status || "stopped"}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 2: Templates */}
-              {activeTab === "templates" && (
-                <div className="space-y-4">
-                  <TemplateSelector
-                    lang={lang}
-                    onLoadTemplate={async (id) => {
-                      await handleLoadTemplate(id);
-                      setActiveTab("workspace");
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Tab 3: Environment Variables */}
-              {activeTab === "env" && (
-                <div className="space-y-4">
-                  <EnvManager lang={lang} onEnvUpdated={fetchWorkspace} />
-                </div>
-              )}
-            </div>
-          </div>
+          <HomePageView
+            status={status}
+            botProfile={botProfile}
+            lang={lang}
+            onNavigate={navigateTo}
+            onStartBot={handleStartBot}
+            onStopBot={handleStopBot}
+            onRestartBot={handleRestartBot}
+            onInstallReqs={handleInstallReqs}
+            isActionLoading={isActionLoading}
+            walletBalance={walletBalance}
+            onWalletUpdated={(bal) => setWalletBalance(bal)}
+            onAddNotification={handleAddNotification}
+            servers={servers}
+            onServerCreated={handleServerCreated}
+            onRefreshServers={fetchServers}
+          />
         )}
 
         {/* Route 2: SERVICES */}
@@ -613,51 +483,18 @@ export default function App() {
           />
         )}
 
-        {/* Bottom Helper Guide / FAQ in Bengali & English (Only on Home Workspace) */}
-        {currentRoute === "/home" && (
-          <section id="usage-guide" className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-            <div className="flex items-center gap-2 mb-3">
-              <BookOpen className="w-4 h-4 text-sky-600" />
-              <h2 className="text-sm font-semibold text-slate-900">
-                {lang === "bn" ? "ব্যবহার নির্দেশিকা (How to use)" : "User Guide & Troubleshooting"}
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600 leading-relaxed">
-              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-                <span className="font-semibold text-slate-800 flex items-center gap-1 mb-1">
-                  1. {lang === "bn" ? "ফাইল আপলোড" : "Upload Files"}
-                </span>
-                <p>
-                  {lang === "bn"
-                    ? "আপনার বটের python কোড (যেমন bot.py) এবং লাইব্রেরির তালিকা (requirements.txt) ড্র্যাগ করে আপলোড করুন।"
-                    : "Drag and drop your bot python code (bot.py) and requirements.txt to the workspace."}
-                </p>
-              </div>
-
-              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-                <span className="font-semibold text-slate-800 flex items-center gap-1 mb-1">
-                  2. {lang === "bn" ? "প্যাকেজ ইনস্টল ও টোকেন" : "Install Pip & Set Token"}
-                </span>
-                <p>
-                  {lang === "bn"
-                    ? "উপরে 'প্যাকেজ ইনস্টল (pip)' বাটনে ক্লিক করুন। তারপর BotFather থেকে পাওয়া টোকেনটি পেস্ট করে সেভ করুন।"
-                    : "Click 'Install Pip Reqs' to install packages, then paste and verify your Telegram Bot Token."}
-                </p>
-              </div>
-
-              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-                <span className="font-semibold text-slate-800 flex items-center gap-1 mb-1">
-                  3. {lang === "bn" ? "বট চালু ও টেস্ট" : "Start & Test Bot"}
-                </span>
-                <p>
-                  {lang === "bn"
-                    ? "'বট চালু করুন (Run)' বাটনে ক্লিক করুন। লাইভ টার্মিনালে মেসেজ এবং লগ দেখতে পাবেন। Telegram এ গিয়ে বটের সাথে চ্যাট করুন!"
-                    : "Click 'Start Bot' to launch the Python process. View live stdout/stderr logs in the console terminal."}
-                </p>
-              </div>
-            </div>
-          </section>
+        {/* Route 5: MY SERVERS (matching user screenshot) */}
+        {currentRoute === "/my-servers" && (
+          <MyServersPageView
+            servers={servers}
+            lang={lang}
+            onNavigate={navigateTo}
+            onRefreshServers={fetchServers}
+            onAddNotification={handleAddNotification}
+            walletBalance={walletBalance}
+            onWalletUpdated={(bal) => setWalletBalance(bal)}
+            onServerCreated={handleServerCreated}
+          />
         )}
       </main>
 

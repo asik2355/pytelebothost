@@ -1,7 +1,7 @@
 import React from "react";
 import { Home, Server, CreditCard, ShoppingBag } from "lucide-react";
 
-export type NavRoute = "/home" | "/services" | "/billing" | "/bot-store";
+export type NavRoute = "/home" | "/services" | "/billing" | "/bot-store" | "/my-servers";
 
 interface BottomNavProps {
   currentRoute: NavRoute;
@@ -54,7 +54,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           const Icon = item.icon;
           const isActive =
             currentRoute === item.route ||
-            (item.route === "/home" && (currentRoute === ("/" as any) || currentRoute === "/home"));
+            (item.route === "/home" && (currentRoute === ("/" as any) || currentRoute === "/home")) ||
+            (item.route === "/services" && currentRoute === "/my-servers");
 
           return (
             <button

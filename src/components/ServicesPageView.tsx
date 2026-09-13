@@ -250,20 +250,20 @@ export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => onNavigate("/my-servers")}
+            className="px-4 py-2 bg-[#5438dc] hover:bg-[#472ecc] text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all shadow-xs cursor-pointer"
+          >
+            <Server className="w-4 h-4" />
+            <span>{lang === "bn" ? "আমার সার্ভারসমূহ" : "My Servers"}</span>
+          </button>
           <button
             onClick={() => onNavigate("/billing")}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all shadow-xs"
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
           >
             <CreditCard className="w-4 h-4" />
             <span>{lang === "bn" ? "ওয়ালেট ও রিচার্জ" : "Wallet & Add Funds"}</span>
-          </button>
-          <button
-            onClick={() => onNavigate("/home")}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all"
-          >
-            <Terminal className="w-4 h-4" />
-            <span>{lang === "bn" ? "বট রানার" : "Bot Runner"}</span>
           </button>
         </div>
       </div>

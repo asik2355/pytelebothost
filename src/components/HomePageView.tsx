@@ -373,7 +373,7 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
               <span>Deploy Server</span>
             </button>
             <button
-              onClick={() => onNavigate("/services")}
+              onClick={() => onNavigate("/my-servers")}
               className="text-xs sm:text-sm font-semibold text-[#5438dc] hover:text-[#432bc4] flex items-center gap-1 cursor-pointer transition-colors"
             >
               <span>View All</span>
@@ -592,13 +592,9 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        const el = document.getElementById("bot-workspace-runner");
-                        if (el) el.scrollIntoView({ behavior: "smooth" });
-                        else onNavigate("/services");
-                      }}
+                      onClick={() => onNavigate("/my-servers")}
                       className="w-9 h-9 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
-                      title="Open Web Terminal / Details"
+                      title="Open Server Details in My Servers"
                     >
                       <ExternalLink className="w-4 h-4" />
                     </button>
