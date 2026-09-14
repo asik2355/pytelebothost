@@ -42,7 +42,6 @@ import { ActiveServer, AppNotification, BotLog, WorkspaceFile } from "../types";
 export type ControlPanelTab =
   | "Console"
   | "Files"
-  | "Backups"
   | "Network"
   | "Startup"
   | "Settings"
@@ -754,7 +753,6 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const tabs: ControlPanelTab[] = [
     "Console",
     "Files",
-    "Backups",
     "Network",
     "Startup",
     "Settings",
@@ -824,10 +822,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           return (
             <button
               key={tab}
-              onClick={() => {
-                setActiveTab(tab);
-                if (tab === "Backups") fetchBackups();
-              }}
+              onClick={() => setActiveTab(tab)}
               className={`px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 isActive
                   ? "bg-[#251849] text-white shadow-sm border border-purple-500/50"
@@ -1441,75 +1436,6 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
         </div>
       )}
 
-      {/* TAB 2b: BACKUPS */}
-      {activeTab === "Backups" && (
-        <div className="space-y-4 max-w-4xl">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Archive className="w-5 h-5 text-purple-400" />
-                <span>Server Backups</span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Create full snapshot archives of {server.name}'s workspace files.
-              </p>
-            </div>
-
-            <button
-              onClick={handleCreateBackup}
-              disabled={isCreatingBackup}
-              className="px-5 py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
-            >
-              {isCreatingBackup ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
-              <span>Create Backup</span>
-            </button>
-          </div>
-
-          <div className="space-y-2.5 pt-2">
-            {backups.length === 0 ? (
-              <div className="bg-[#121828] border border-slate-800 rounded-2xl p-10 text-center text-slate-500 italic text-sm">
-                No backup snapshots yet. Click "Create Backup" to generate a snapshot.
-              </div>
-            ) : (
-              backups.map((bkp) => (
-                <div
-                  key={bkp.id}
-                  className="bg-[#121828] border border-slate-800/90 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap"
-                >
-                  <div className="flex items-center gap-3">
-                    <Archive className="w-5 h-5 text-purple-400 shrink-0" />
-                    <div>
-                      <span className="font-mono text-sm text-slate-200 font-bold block">{bkp.name}</span>
-                      <span className="text-xs text-slate-500 font-mono">
-                        {(bkp.size / 1024).toFixed(1)} KB • {new Date(bkp.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleRestoreBackup(bkp.id)}
-                      disabled={isRestoringBackup === bkp.id}
-                      className="px-3.5 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-purple-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      {isRestoringBackup === bkp.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                      <span>Restore</span>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBackup(bkp.id)}
-                      className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 text-xs cursor-pointer"
-                      title="Delete Backup"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
       {/* TAB 3: NETWORK */}
       {activeTab === "Network" && (
         <div className="space-y-5 max-w-4xl">
@@ -1620,65 +1546,6 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
             <div className="bg-[#121829] border border-slate-800 rounded-xl p-3 text-xs text-slate-400">
               Container Runtime: <span className="font-mono text-purple-300">{server.category} (isolated container)</span>
-            </div>
-          </div>
-
-          {/* Environment Variables */}
-          <div className="bg-[#182035] border border-slate-800 rounded-2xl p-5 space-y-4">
-            <h2 className="text-base font-bold text-white">Environment Variables (.env)</h2>
-            <div className="space-y-2">
-              {envVars.map((env, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <span className="w-1/3 bg-[#0b0f19] border border-slate-800 rounded-xl px-3 py-2 text-purple-300 font-mono text-xs truncate">
-                    {env.key}
-                  </span>
-                  <input
-                    type="text"
-                    value={env.value}
-                    onChange={(e) => {
-                      const updated = [...envVars];
-                      updated[idx].value = e.target.value;
-                      setEnvVars(updated);
-                    }}
-                    className="flex-1 bg-[#0b0f19] border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-purple-500 focus:outline-hidden"
-                  />
-                  <button
-                    onClick={() => setEnvVars(envVars.filter((_, i) => i !== idx))}
-                    className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Add New Variable */}
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
-              <input
-                type="text"
-                placeholder="VARIABLE_NAME"
-                value={newEnvKey}
-                onChange={(e) => setNewEnvKey(e.target.value.toUpperCase())}
-                className="w-1/3 bg-[#0b0f19] border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs"
-              />
-              <input
-                type="text"
-                placeholder="Value..."
-                value={newEnvVal}
-                onChange={(e) => setNewEnvVal(e.target.value)}
-                className="flex-1 bg-[#0b0f19] border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs"
-              />
-              <button
-                onClick={() => {
-                  if (!newEnvKey.trim()) return;
-                  setEnvVars([...envVars, { key: newEnvKey.trim(), value: newEnvVal.trim() }]);
-                  setNewEnvKey("");
-                  setNewEnvVal("");
-                }}
-                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
-              >
-                Add
-              </button>
             </div>
           </div>
         </div>

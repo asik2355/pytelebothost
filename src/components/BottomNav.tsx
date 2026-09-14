@@ -33,7 +33,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     },
     {
       route: "/billing",
-      name: "BILLING",
+      name: "BALANCE",
       icon: CreditCard,
     },
     {

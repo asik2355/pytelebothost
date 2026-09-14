@@ -505,7 +505,7 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                     }`}
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>BILLING</span>
+                    <span>BALANCE</span>
                   </button>
 
                   <button

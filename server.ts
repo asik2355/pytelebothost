@@ -1282,6 +1282,54 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
   onComplete?.(true);
 }
 
+function killServerProcess(serverId: string) {
+  const runtime = getServerRuntime(serverId);
+  const sDir = getServerDir(serverId);
+
+  if (runtime && runtime.proc) {
+    const pid = runtime.proc.pid;
+    if (pid) {
+      try {
+        process.kill(-pid, "SIGTERM");
+      } catch {
+        try {
+          runtime.proc.kill("SIGTERM");
+        } catch {}
+      }
+
+      try {
+        execSync(`pkill -TERM -P ${pid} 2>/dev/null || true`);
+        execSync(`pkill -9 -P ${pid} 2>/dev/null || true`);
+      } catch {}
+
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {
+        try {
+          runtime.proc.kill("SIGKILL");
+        } catch {}
+      }
+    }
+    runtime.proc = null;
+    runtime.startTime = null;
+  }
+
+  // Forcefully terminate any remaining rogue/orphan python, node, or child processes running in this server workspace
+  try {
+    const cleanDir = sDir.replace(/'/g, "");
+    execSync(`pkill -9 -f "${cleanDir}" 2>/dev/null || true`, { stdio: "ignore" });
+    execSync(`fuser -k -9 "${cleanDir}" 2>/dev/null || true`, { stdio: "ignore" });
+    execSync(`lsof +D "${cleanDir}" -t 2>/dev/null | grep -v "^${process.pid}$" | xargs -r kill -9 2>/dev/null || true`, { stdio: "ignore" });
+  } catch {
+    // ignore
+  }
+
+  if (runtime) {
+    runtime.proc = null;
+    runtime.startTime = null;
+  }
+}
+
 // 3. Server Actions: Start, Stop, Restart (Per Server Process Isolation)
 app.post("/api/servers/action", (req, res) => {
   const { serverId, action } = req.body;
@@ -1298,36 +1346,18 @@ app.post("/api/servers/action", (req, res) => {
   const config = getServerConfig(server.id, server);
 
   if (action === "stop") {
-    if (runtime.proc) {
-      try {
-        runtime.proc.kill("SIGTERM");
-        setTimeout(() => {
-          if (runtime.proc) runtime.proc.kill("SIGKILL");
-        }, 1500);
-      } catch {
-        // ignore
-      }
-      runtime.proc = null;
-    }
-    runtime.startTime = null;
+    killServerProcess(server.id);
     server.status = "STOPPED";
     server.ramUsage = "0.00 MB RAM";
     server.cpuUsage = "0.00% CPU";
-    addServerLog(server.id, "system", `⏹️ Server stopped by user.`);
+    addServerLog(server.id, "system", `⏹️ Server process terminated & stopped.`);
     saveServersData(servers);
     return res.json({ success: true, server });
   }
 
   if (action === "start" || action === "restart") {
-    // If restarting and already running, kill first
-    if (runtime.proc) {
-      try {
-        runtime.proc.kill("SIGTERM");
-      } catch {
-        // ignore
-      }
-      runtime.proc = null;
-    }
+    // If restarting or starting, kill any existing or orphan processes first
+    killServerProcess(server.id);
 
     // Auto-detect entry file if startupCommand is default or not explicitly set
     let cmdStr = config.startupCommand?.trim();
@@ -1383,6 +1413,7 @@ app.post("/api/servers/action", (req, res) => {
           cwd: sDir,
           env: procEnv,
           shell: true,
+          detached: true,
         });
 
         runtime.proc = proc;
@@ -1956,16 +1987,8 @@ app.post("/api/servers/:id/reinstall", (req, res) => {
   }
 
   const sDir = getServerDir(id);
-  // Stop process if running
-  const runtime = getServerRuntime(id);
-  if (runtime.proc) {
-    try {
-      runtime.proc.kill("SIGKILL");
-    } catch {
-      // ignore
-    }
-    runtime.proc = null;
-  }
+  // Stop and clean up any processes
+  killServerProcess(id);
   server.status = "STOPPED";
   saveServersData(servers);
 
@@ -1996,15 +2019,8 @@ app.delete("/api/servers/:id", (req, res) => {
     return res.status(404).json({ error: "Server not found" });
   }
 
-  // Kill running process
-  const runtime = serverRuntimes.get(id);
-  if (runtime && runtime.proc) {
-    try {
-      runtime.proc.kill("SIGKILL");
-    } catch {
-      // ignore
-    }
-  }
+  // Kill running processes completely
+  killServerProcess(id);
   serverRuntimes.delete(id);
 
   // Remove server folder
