@@ -96,6 +96,8 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const [activeFileMenu, setActiveFileMenu] = useState<string | null>(null);
   const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<string | null>(null);
+  const [isDeletingFile, setIsDeletingFile] = useState(false);
 
   // Backups State
   const [backups, setBackups] = useState<Array<{ id: string; name: string; size: number; createdAt: string }>>([]);
@@ -322,17 +324,26 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     }
   };
 
-  const handleDeleteFile = async (filename: string) => {
-    if (!confirm(lang === "bn" ? `আপনি কি নিশ্চিত যে "${filename}" ফাইলটি ডিলিট করতে চান?` : `Are you sure you want to delete "${filename}"?`)) return;
+  const handleDeleteFile = (filename: string) => {
+    setFileToDelete(filename);
+    setActiveFileMenu(null);
+  };
+
+  const confirmDeleteFile = async () => {
+    if (!fileToDelete) return;
+    const filename = fileToDelete;
+    setIsDeletingFile(true);
     try {
       const res = await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(filename)}`, {
         method: "DELETE",
       });
       if (res.ok) {
+        setFiles((prev) => prev.filter((f) => f.name !== filename));
         await fetchFiles();
         if (selectedFile === filename) {
           setSelectedFile(null);
           setFileContent("");
+          setIsEditorModalOpen(false);
         }
         onAddNotification?.({
           id: `del-file-${Date.now()}`,
@@ -347,6 +358,9 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
       }
     } catch {
       // ignore
+    } finally {
+      setIsDeletingFile(false);
+      setFileToDelete(null);
     }
   };
 
@@ -816,37 +830,6 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
             </div>
           </div>
 
-          {/* Live System Resource Stats Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">MEMORY</span>
-              <span className="text-base sm:text-lg font-mono font-bold text-emerald-400">
-                {isRunning ? server.ramUsage || "141.88 MB" : "0.00 MB"}{" "}
-                <span className="text-xs text-slate-500 font-normal">/ 512 MB</span>
-              </span>
-            </div>
-            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">CPU USAGE</span>
-              <span className="text-base sm:text-lg font-mono font-bold text-red-400">
-                {isRunning ? server.cpuUsage || "46.36%" : "0.00%"}{" "}
-                <span className="text-xs text-slate-500 font-normal">/ 50%</span>
-              </span>
-            </div>
-            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">DISK SPACE</span>
-              <span className="text-base sm:text-lg font-mono font-bold text-sky-400">
-                {isRunning ? server.diskUsage || "86.27 MB" : "0.00 MB"}{" "}
-                <span className="text-xs text-slate-500 font-normal">/ 2 GB</span>
-              </span>
-            </div>
-            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">NETWORK I/O</span>
-              <span className="text-base sm:text-lg font-mono font-bold text-purple-400">
-                {isRunning ? "1.84 MB / 4.2 MB" : "0.00 KB"}
-              </span>
-            </div>
-          </div>
-
           {/* Console Terminal Container */}
           <div className="bg-[#090d16] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[520px]">
             {/* Terminal Header */}
@@ -925,25 +908,37 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               )}
               <div ref={consoleEndRef} />
             </div>
+          </div>
 
-            {/* Terminal Command Prompt Input */}
-            <form onSubmit={handleSendCommand} className="bg-[#111726] border-t border-slate-800/80 p-2.5 flex items-center gap-2">
-              <span className="font-mono text-xs font-bold text-purple-400 px-1">$</span>
-              <input
-                type="text"
-                value={commandInput}
-                onChange={(e) => setCommandInput(e.target.value)}
-                placeholder="Type a command (e.g. ls, cat main.py, uptime, clear)..."
-                className="flex-1 bg-transparent border-0 text-white font-mono text-xs focus:ring-0 focus:outline-hidden placeholder:text-slate-600"
-              />
-              <button
-                type="submit"
-                className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <Send className="w-3 h-3" />
-                <span>Send</span>
-              </button>
-            </form>
+          {/* Live System Resource Stats Bar (Placed below the console) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">MEMORY</span>
+              <span className="text-base sm:text-lg font-mono font-bold text-emerald-400">
+                {isRunning ? server.ramUsage || "141.88 MB" : "0.00 MB"}{" "}
+                <span className="text-xs text-slate-500 font-normal">/ 512 MB</span>
+              </span>
+            </div>
+            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">CPU USAGE</span>
+              <span className="text-base sm:text-lg font-mono font-bold text-red-400">
+                {isRunning ? server.cpuUsage || "46.36%" : "0.00%"}{" "}
+                <span className="text-xs text-slate-500 font-normal">/ 50%</span>
+              </span>
+            </div>
+            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">DISK SPACE</span>
+              <span className="text-base sm:text-lg font-mono font-bold text-sky-400">
+                {isRunning ? server.diskUsage || "86.27 MB" : "0.00 MB"}{" "}
+                <span className="text-xs text-slate-500 font-normal">/ 2 GB</span>
+              </span>
+            </div>
+            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">NETWORK I/O</span>
+              <span className="text-base sm:text-lg font-mono font-bold text-purple-400">
+                {isRunning ? "1.84 MB / 4.2 MB" : "0.00 KB"}
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -1289,6 +1284,15 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                       <span>Save</span>
                     </button>
                     <button
+                      onClick={() => {
+                        handleDeleteFile(selectedFile);
+                      }}
+                      className="p-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/80 text-red-400 hover:text-red-200 cursor-pointer transition-colors"
+                      title="Delete File"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => setIsEditorModalOpen(false)}
                       className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
                       title="Close Editor"
@@ -1306,6 +1310,47 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                   className="flex-1 bg-[#060910] p-4 text-slate-200 font-mono text-xs sm:text-sm leading-relaxed resize-none focus:outline-hidden selection:bg-purple-900 border-0"
                   spellCheck={false}
                 />
+              </div>
+            </div>
+          )}
+
+          {/* Delete File Confirmation Modal */}
+          {fileToDelete && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-[#182035] border border-slate-700 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-red-400 flex items-center gap-2">
+                    <Trash2 className="w-5 h-5 text-red-400" />
+                    <span>{lang === "bn" ? "ফাইল ডিলিট করবেন?" : "Delete File?"}</span>
+                  </h3>
+                  <button onClick={() => setFileToDelete(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {lang === "bn"
+                    ? `আপনি কি নিশ্চিত যে "${fileToDelete}" ফাইলটি স্থায়ীভাবে ডিলিট করতে চান?`
+                    : `Are you sure you want to permanently delete "${fileToDelete}" from the workspace?`}
+                </p>
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setFileToDelete(null)}
+                    disabled={isDeletingFile}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 cursor-pointer disabled:opacity-50"
+                  >
+                    {lang === "bn" ? "বাতিল" : "Cancel"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDeleteFile}
+                    disabled={isDeletingFile}
+                    className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isDeletingFile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    <span>{lang === "bn" ? "ডিলিট করুন" : "Delete"}</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

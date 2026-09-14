@@ -935,6 +935,12 @@ function ensureServerWorkspace(server: ServerRecord) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
+  // Once a workspace is initialized, DO NOT recreate deleted files!
+  const initMarker = path.join(dir, ".initialized");
+  if (fs.existsSync(initMarker)) {
+    return;
+  }
+
   const config = getServerConfig(server.id, server);
 
   // Category specific template files
@@ -1102,6 +1108,13 @@ while True:
 `,
       "utf-8"
     );
+  }
+
+  // Mark initialized
+  try {
+    fs.writeFileSync(initMarker, new Date().toISOString(), "utf-8");
+  } catch {
+    // ignore
   }
 }
 
@@ -1470,7 +1483,7 @@ app.get("/api/servers/:id/files", (req, res) => {
   try {
     const filenames = fs.readdirSync(sDir);
     const files = filenames
-      .filter((name) => name !== ".config.json")
+      .filter((name) => name !== ".config.json" && name !== ".initialized" && name !== ".backups")
       .map((name) => {
         const fullPath = path.join(sDir, name);
         try {
