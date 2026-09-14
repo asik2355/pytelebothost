@@ -1334,73 +1334,147 @@ app.post("/api/servers/action", (req, res) => {
       runtime.proc = null;
     }
 
-    const cmdStr = config.startupCommand || (server.category === "golang" ? "go run main.go" : "python3 main.py");
-    addServerLog(server.id, "system", `🚀 Executing startup command: ${cmdStr}`);
+    // Auto-detect entry file if startupCommand is default or not explicitly set
+    let cmdStr = config.startupCommand?.trim();
+    if (!cmdStr || cmdStr === "python3 main.py" || cmdStr === "node index.js" || cmdStr === "go run main.go") {
+      try {
+        const dirFiles = fs.readdirSync(sDir);
+        if (server.category === "golang" && dirFiles.includes("main.go")) {
+          cmdStr = "go run main.go";
+        } else if (server.category === "node.js generic" || server.category === "Bun") {
+          const jsEntry = dirFiles.find((f) => ["index.js", "bot.js", "app.js", "main.js", "server.js", "index.ts"].includes(f));
+          cmdStr = jsEntry ? `node ${jsEntry}` : (server.category === "Bun" ? "bun run index.ts" : "node index.js");
+        } else {
+          // Python
+          const pyEntry = dirFiles.find((f) => ["main.py", "app.py", "bot.py", "index.py", "server.py"].includes(f)) ||
+            dirFiles.find((f) => f.endsWith(".py") && !f.startsWith("."));
+          cmdStr = pyEntry ? `python3 -u ${pyEntry}` : "python3 -u main.py";
+        }
+      } catch {
+        cmdStr = "python3 -u main.py";
+      }
+    } else if (cmdStr.startsWith("python3 ") && !cmdStr.includes(" -u ")) {
+      cmdStr = cmdStr.replace("python3 ", "python3 -u ");
+    }
+
+    addServerLog(server.id, "system", `🚀 Launching server container...`);
+    addServerLog(server.id, "system", `📦 Working directory: /home/container/`);
+
+    // Parse workspace .env file if present
+    const serverEnvFile = path.join(sDir, ".env");
+    const parsedFileEnv: Record<string, string> = {};
+    if (fs.existsSync(serverEnvFile)) {
+      try {
+        const lines = fs.readFileSync(serverEnvFile, "utf-8").split("\n");
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
+            const idx = trimmed.indexOf("=");
+            const k = trimmed.slice(0, idx).trim();
+            const v = trimmed.slice(idx + 1).trim();
+            if (k) parsedFileEnv[k] = v;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     // Build environment
     const customEnv: Record<string, string> = {};
     for (const item of config.envVars || []) {
       if (item.key) customEnv[item.key] = item.value;
     }
-    const procEnv = { ...process.env, ...customEnv, SERVER_ID: server.id, SERVER_NAME: server.name, PYTHONUNBUFFERED: "1" };
+    const procEnv = {
+      ...process.env,
+      ...parsedFileEnv,
+      ...customEnv,
+      SERVER_ID: server.id,
+      SERVER_NAME: server.name,
+      PORT: config.port?.toString() || "25000",
+      PYTHONUNBUFFERED: "1",
+    };
 
-    // Check entry file
-    const parts = cmdStr.trim().split(/\s+/);
-    const bin = parts[0];
-    const args = parts.slice(1);
+    // Check if requirements.txt exists and check dependencies
+    const reqFile = path.join(sDir, "requirements.txt");
+    const runServerProcess = () => {
+      addServerLog(server.id, "system", `🚀 Executing command: ${cmdStr}`);
 
-    try {
-      const proc = spawn(bin, args, {
-        cwd: sDir,
-        env: procEnv,
-      });
+      try {
+        const proc = spawn(cmdStr, {
+          cwd: sDir,
+          env: procEnv,
+          shell: true,
+        });
 
-      runtime.proc = proc;
-      runtime.startTime = Date.now();
-      server.status = "RUNNING";
+        runtime.proc = proc;
+        runtime.startTime = Date.now();
+        server.status = "RUNNING";
 
-      const realMemMb = (process.memoryUsage().rss / (1024 * 1024)).toFixed(1);
-      server.ramUsage = `${realMemMb} MB RAM`;
-      server.cpuUsage = `${(0.4 + Math.random() * 0.8).toFixed(2)}% CPU`;
-      server.diskUsage = "14.2 MB Disk";
+        const realMemMb = (process.memoryUsage().rss / (1024 * 1024)).toFixed(1);
+        server.ramUsage = `${realMemMb} MB RAM`;
+        server.cpuUsage = `${(0.4 + Math.random() * 0.8).toFixed(2)}% CPU`;
+        server.diskUsage = "14.2 MB Disk";
 
-      proc.stdout?.on("data", (chunk) => {
-        const text = chunk.toString();
-        for (const line of text.split("\n")) {
-          if (line.length > 0) addServerLog(server.id, "stdout", line);
-        }
-      });
+        proc.stdout?.on("data", (chunk) => {
+          const text = chunk.toString();
+          for (const line of text.split("\n")) {
+            if (line.length > 0) addServerLog(server.id, "stdout", line);
+          }
+        });
 
-      proc.stderr?.on("data", (chunk) => {
-        const text = chunk.toString();
-        for (const line of text.split("\n")) {
-          if (line.length > 0) addServerLog(server.id, "stderr", line);
-        }
-      });
+        proc.stderr?.on("data", (chunk) => {
+          const text = chunk.toString();
+          for (const line of text.split("\n")) {
+            if (line.length > 0) addServerLog(server.id, "stderr", line);
+          }
+        });
 
-      proc.on("close", (code, signal) => {
-        runtime.proc = null;
-        runtime.startTime = null;
-        server.status = code === 0 ? "STOPPED" : "STOPPED";
-        addServerLog(server.id, "system", `⏹️ Server process exited (code: ${code}, signal: ${signal || "none"})`);
+        proc.on("close", (code, signal) => {
+          runtime.proc = null;
+          runtime.startTime = null;
+          server.status = "STOPPED";
+          addServerLog(server.id, "system", `⏹️ Server process stopped (exit code: ${code !== null ? code : "none"}, signal: ${signal || "none"})`);
+          saveServersData(servers);
+        });
+
+        proc.on("error", (err) => {
+          runtime.proc = null;
+          runtime.startTime = null;
+          server.status = "STOPPED";
+          addServerLog(server.id, "stderr", `Startup error: ${err.message}`);
+          saveServersData(servers);
+        });
+
         saveServersData(servers);
-      });
+        addServerLog(server.id, "system", `✅ Container running & listening on 0.0.0.0:${config.port}`);
+        return res.json({ success: true, server, pid: proc.pid });
+      } catch (err: any) {
+        addServerLog(server.id, "stderr", `Failed to spawn: ${err.message}`);
+        return res.status(500).json({ error: err.message });
+      }
+    };
 
-      proc.on("error", (err) => {
-        runtime.proc = null;
-        runtime.startTime = null;
-        server.status = "STOPPED";
-        addServerLog(server.id, "stderr", `Startup error: ${err.message}`);
-        saveServersData(servers);
+    if (fs.existsSync(reqFile) && fs.readFileSync(reqFile, "utf-8").trim().length > 0) {
+      addServerLog(server.id, "pip", `📦 Found requirements.txt. Checking package dependencies...`);
+      exec(`pip3 install -r "${reqFile}"`, { cwd: sDir, env: procEnv }, (err, stdout, stderr) => {
+        if (stdout) {
+          const lines = stdout.split("\n").filter((l) => l.trim().length > 0 && !l.includes("WARNING: Running pip as the 'root'"));
+          for (const l of lines.slice(-5)) {
+            addServerLog(server.id, "pip", l);
+          }
+        }
+        if (err) {
+          addServerLog(server.id, "stderr", `Pip install notice: ${err.message}`);
+        } else {
+          addServerLog(server.id, "pip", `✅ Dependencies verified.`);
+        }
+        runServerProcess();
       });
-
-      saveServersData(servers);
-      addServerLog(server.id, "system", `✅ Container listening on 0.0.0.0:${config.port}`);
-      return res.json({ success: true, server, pid: proc.pid });
-    } catch (err: any) {
-      addServerLog(server.id, "stderr", `Failed to spawn: ${err.message}`);
-      return res.status(500).json({ error: err.message });
+    } else {
+      runServerProcess();
     }
+    return;
   }
 
   res.status(400).json({ error: "Invalid action" });
