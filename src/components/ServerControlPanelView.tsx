@@ -913,11 +913,15 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           <div className="bg-[#090d16] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[520px]">
             {/* Terminal Header */}
             <div className="bg-[#111726] px-4 py-2.5 border-b border-slate-800/80 flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
                 <TerminalIcon className="w-4 h-4 text-purple-400" />
                 <span className="font-bold tracking-wider uppercase text-slate-100 text-xs sm:text-sm font-mono">
                   LIVE CONSOLE
+                </span>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/40 text-[10px] font-mono text-purple-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Freestyle VPS: 208.72.218.137
                 </span>
               </div>
 
@@ -1018,6 +1022,9 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               <span className="text-slate-500">/</span>
               <span className="text-slate-200 font-semibold">container</span>
               <span className="text-slate-500">/</span>
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-purple-950/80 border border-purple-500/40 text-[10px] text-purple-300 hidden sm:inline">
+                Direct VPS Sync
+              </span>
             </div>
 
             {/* Actions Toolbar - Always Single Row */}
