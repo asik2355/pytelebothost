@@ -138,7 +138,20 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     },
   ]);
 
-  const isRunning = server.status === "RUNNING";
+  const [liveStats, setLiveStats] = useState<{
+    ramUsage?: string;
+    cpuUsage?: string;
+    diskUsage?: string;
+    status?: "RUNNING" | "STOPPED";
+  }>({
+    ramUsage: server.ramUsage,
+    cpuUsage: server.cpuUsage,
+    diskUsage: server.diskUsage,
+    status: server.status,
+  });
+
+  const effectiveStatus = liveStats.status || server.status;
+  const isRunning = effectiveStatus === "RUNNING";
   const uuid = (server.region.split("•")[1] || server.id.replace(/[^a-zA-Z0-9]/g, "").slice(-8)).trim();
   const assignedPort = server.port || 25565;
   const assignedIp = server.ip || "194.163.148.91";
@@ -149,6 +162,14 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
       const res = await fetch(`/api/servers/${server.id}/details`);
       if (res.ok) {
         const data = await res.json();
+        if (data.server) {
+          setLiveStats({
+            ramUsage: data.server.ramUsage,
+            cpuUsage: data.server.cpuUsage,
+            diskUsage: data.server.diskUsage,
+            status: data.server.status,
+          });
+        }
         if (data.config) {
           if (data.config.startupCommand) setStartupCmd(data.config.startupCommand);
           if (Array.isArray(data.config.envVars)) setEnvVars(data.config.envVars);
@@ -220,7 +241,10 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     fetchServerDetails();
     fetchLogs();
     fetchFiles();
-    const interval = setInterval(fetchLogs, 2500);
+    const interval = setInterval(() => {
+      fetchLogs();
+      fetchServerDetails();
+    }, 2500);
     return () => clearInterval(interval);
   }, [server.id]);
 
@@ -926,21 +950,21 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
             <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">MEMORY</span>
               <span className="text-base sm:text-lg font-mono font-bold text-emerald-400">
-                {isRunning ? server.ramUsage || "141.88 MB" : "0.00 MB"}{" "}
+                {isRunning ? (liveStats.ramUsage || server.ramUsage || "0.00 MB").replace(/RAM/i, "").trim() : "0.00 MB"}{" "}
                 <span className="text-xs text-slate-500 font-normal">/ 512 MB</span>
               </span>
             </div>
             <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">CPU USAGE</span>
               <span className="text-base sm:text-lg font-mono font-bold text-red-400">
-                {isRunning ? server.cpuUsage || "46.36%" : "0.00%"}{" "}
+                {isRunning ? (liveStats.cpuUsage || server.cpuUsage || "0.00%").replace(/CPU/i, "").trim() : "0.00%"}{" "}
                 <span className="text-xs text-slate-500 font-normal">/ 50%</span>
               </span>
             </div>
             <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">DISK SPACE</span>
               <span className="text-base sm:text-lg font-mono font-bold text-sky-400">
-                {isRunning ? server.diskUsage || "86.27 MB" : "0.00 MB"}{" "}
+                {(liveStats.diskUsage || server.diskUsage || "0.00 KB").replace(/Disk/i, "").trim()}{" "}
                 <span className="text-xs text-slate-500 font-normal">/ 2 GB</span>
               </span>
             </div>
