@@ -209,7 +209,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
   return (
     <div className="min-h-[80vh] flex flex-col justify-center py-6 sm:py-10 px-3 sm:px-6 lg:px-8">
       {/* Top Breadcrumb & Home Link */}
-      <div className="max-w-4xl mx-auto w-full mb-4 flex items-center justify-between">
+      <div className="max-w-md mx-auto w-full mb-4 flex items-center justify-between">
         <button
           onClick={() => onNavigate("/home")}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200/80 shadow-2xs transition-all cursor-pointer"
@@ -219,97 +219,9 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
         </button>
       </div>
 
-      <div className="max-w-4xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-xl overflow-hidden">
-        {/* Left Col: Brand Presentation & Highlights (Visible on Desktop/Tablet) */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden">
-          {/* Ambient Glows */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="relative z-10">
-            {/* Logo */}
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-400 via-indigo-500 to-purple-500 p-0.5 shadow-md flex items-center justify-center shrink-0">
-                <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                  <Bot className="w-5 h-5 text-indigo-400" />
-                </div>
-              </div>
-              <div>
-                <span className="font-extrabold text-white text-lg tracking-tight font-sans block">
-                  bot-host.xyz
-                </span>
-                <span className="text-[10px] text-indigo-300 font-medium tracking-wide">
-                  CLOUD TELEGRAM BOT HOSTING
-                </span>
-              </div>
-            </div>
-
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug">
-              {mode === "login"
-                ? lang === "bn"
-                  ? "আপনার বট ড্যাশবোর্ডে প্রবেশ করুন"
-                  : "Welcome Back to Your Bot Cloud"
-                : lang === "bn"
-                ? "খুব সহজে একাউন্ট তৈরি করে বট রান করুন"
-                : "Create Your Account & Deploy Instantly"}
-            </h2>
-            <p className="text-xs text-slate-300 mt-2 leading-relaxed">
-              {lang === "bn"
-                ? "হাই-স্পিড NVMe সার্ভার, ২৪/৭ আপটাইম এবং অটোমেটেড টেলিগ্রাম বট এক্সিকিউশন প্ল্যাটফর্ম।"
-                : "High-performance Python, Node.js & Go bot runners with instant bKash/Nagad billing."}
-            </p>
-
-            {/* Feature Pills */}
-            <div className="mt-6 space-y-3">
-              <div className="flex items-start gap-2.5 text-xs text-slate-200">
-                <div className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <Zap className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <span className="font-bold text-white block">1-Click Bot Startup</span>
-                  <span className="text-[11px] text-slate-400">
-                    {lang === "bn" ? "কাস্টম রিপো ও ফাইল রানার" : "Run custom Python & Node bots"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5 text-xs text-slate-200">
-                <div className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <span className="font-bold text-white block">99.9% Uptime Guarantee</span>
-                  <span className="text-[11px] text-slate-400">
-                    {lang === "bn" ? "অবিরাম রানিং ব্যাকগ্রাউন্ড প্রসেস" : "Always-on isolated containers"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5 text-xs text-slate-200">
-                <div className="w-5 h-5 rounded-md bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <Server className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <span className="font-bold text-white block">Instant Auto Billing</span>
-                  <span className="text-[11px] text-slate-400">
-                    {lang === "bn" ? "বিকাশ ও নগদ স্বয়ংক্রিয় রিচার্জ" : "Pay as low as ৳50/month"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative z-10 pt-6 mt-6 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-            <span>© 2026 bot-host.xyz</span>
-            <span className="flex items-center gap-1 text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Servers Online
-            </span>
-          </div>
-        </div>
-
-        {/* Right Col: Authentication Forms */}
-        <div className="lg:col-span-7 p-6 sm:p-8 lg:p-10 flex flex-col justify-center">
+      <div className="max-w-md mx-auto w-full bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-xl overflow-hidden p-6 sm:p-8">
+        {/* Authentication Forms */}
+        <div className="flex flex-col justify-center">
           {/* Header Switcher Tabs */}
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
             <div className="flex items-center gap-2">

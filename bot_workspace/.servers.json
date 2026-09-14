@@ -1,18 +1,1 @@
-[
-  {
-    "id": "srv-1789359367163",
-    "name": "Ok",
-    "category": "python3",
-    "region": "EU • 561cf376",
-    "status": "STOPPED",
-    "ramUsage": "20.3 MB",
-    "cpuUsage": "0.24%",
-    "diskUsage": "5.47 MB",
-    "daysLeft": "30d left",
-    "planName": "Mini-v1",
-    "planPrice": 100,
-    "createdAt": "2026-09-14T04:16:07.163Z",
-    "port": 25419,
-    "ip": "194.163.148.91"
-  }
-]
+[]

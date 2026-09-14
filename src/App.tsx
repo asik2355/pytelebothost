@@ -175,6 +175,7 @@ export default function App() {
 
   // Fetch Workspace Info & Token
   const fetchWallet = useCallback(async () => {
+    if (!currentUser) return;
     try {
       const res = await fetch("/api/billing/wallet");
       if (res.ok) {
@@ -186,9 +187,13 @@ export default function App() {
     } catch {
       // ignore
     }
-  }, []);
+  }, [currentUser]);
 
   const fetchServers = useCallback(async () => {
+    if (!currentUser) {
+      setServers([]);
+      return;
+    }
     try {
       const res = await fetch("/api/servers");
       if (res.ok) {
@@ -200,7 +205,7 @@ export default function App() {
     } catch {
       // ignore
     }
-  }, []);
+  }, [currentUser]);
 
   const handleServerCreated = useCallback((newServer: ActiveServer) => {
     setServers((prev) => {
@@ -217,11 +222,15 @@ export default function App() {
         const data: WorkspaceStatus = await res.json();
         setStatus(data);
       }
-      fetchWallet();
+      if (currentUser) {
+        fetchWallet();
+      } else {
+        setWalletBalance(0);
+      }
     } catch {
       // ignore
     }
-  }, [fetchWallet]);
+  }, [fetchWallet, currentUser]);
 
   // Fetch Current Token from .env
   const fetchCurrentToken = useCallback(async () => {
@@ -347,13 +356,22 @@ export default function App() {
   useEffect(() => {
     fetchWorkspace();
     fetchCurrentToken();
-    fetchServers();
+    if (currentUser) {
+      fetchServers();
+      fetchWallet();
+    } else {
+      setServers([]);
+      setWalletBalance(0);
+    }
     const interval = setInterval(() => {
       fetchWorkspace();
-      fetchServers();
+      if (currentUser) {
+        fetchServers();
+        fetchWallet();
+      }
     }, 3000);
     return () => clearInterval(interval);
-  }, [fetchWorkspace, fetchCurrentToken, fetchServers]);
+  }, [fetchWorkspace, fetchCurrentToken, fetchServers, fetchWallet, currentUser]);
 
   // Actions
   const handleStartBot = async () => {

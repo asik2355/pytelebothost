@@ -3,9 +3,6 @@ import {
   Search,
   Hourglass,
   Network,
-  LayoutGrid,
-  List,
-  Menu,
   Plus,
   Play,
   Square,
@@ -37,7 +34,6 @@ interface MyServersPageViewProps {
 }
 
 type StatusFilter = "ALL SERVERS" | "RUNNING" | "INSTALLING" | "SUSPENDED" | "OFFLINE";
-type ViewMode = "cards" | "grid" | "compact";
 
 export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
   servers = [],
@@ -53,7 +49,6 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState<StatusFilter>("ALL SERVERS");
-  const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [managingServerId, setManagingServerId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
@@ -282,45 +277,9 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
           })}
         </div>
 
-        {/* View Mode Switcher (Grid / Cards / Compact) */}
+        {/* Server Count Indicator */}
         <div className="flex items-center justify-between pt-1">
-          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/60 shadow-2xs">
-            <button
-              onClick={() => setViewMode("grid")}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                viewMode === "grid"
-                  ? "bg-white text-[#5438dc] shadow-2xs font-bold"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-              title="Grid View"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("cards")}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                viewMode === "cards"
-                  ? "bg-[#5438dc] text-white shadow-2xs font-bold"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-              title="Card View (Default)"
-            >
-              <List className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("compact")}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                viewMode === "compact"
-                  ? "bg-white text-[#5438dc] shadow-2xs font-bold"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-              title="Compact View"
-            >
-              <Menu className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="text-xs text-slate-500 font-medium">
+          <div className="text-xs text-slate-500 font-semibold tracking-wide">
             {lang === "bn"
               ? `${filteredServers.length} টি সার্ভার পাওয়া গেছে`
               : `${filteredServers.length} servers found`}
@@ -374,13 +333,7 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
         </div>
       ) : (
         /* Server Cards Display */
-        <div
-          className={
-            viewMode === "grid"
-              ? "grid grid-cols-1 md:grid-cols-2 gap-4"
-              : "space-y-4"
-          }
-        >
+        <div className="space-y-4">
           {filteredServers.map((srv) => {
             const isSrvRunning = srv.status === "RUNNING";
             const isManaging = managingServerId === srv.id;
