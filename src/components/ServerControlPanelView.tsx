@@ -3,6 +3,8 @@ import {
   ArrowLeft,
   Terminal as TerminalIcon,
   FolderOpen,
+  Folder,
+  FolderPlus,
   Wifi,
   Play,
   RotateCw,
@@ -25,12 +27,19 @@ import {
   Send,
   ExternalLink,
   ChevronRight,
+  MoreHorizontal,
+  Download,
+  Edit3,
+  X,
+  Archive,
+  File,
 } from "lucide-react";
 import { ActiveServer, AppNotification, BotLog, WorkspaceFile } from "../types";
 
 export type ControlPanelTab =
   | "Console"
   | "Files"
+  | "Backups"
   | "Network"
   | "Startup"
   | "Settings"
@@ -68,6 +77,8 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const [logs, setLogs] = useState<BotLog[]>([]);
   const [commandInput, setCommandInput] = useState("");
   const [isCopiedLogs, setIsCopiedLogs] = useState(false);
+  const [autoScrollLogs, setAutoScrollLogs] = useState<boolean>(false);
+  const consoleContainerRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
   // Files State
@@ -77,7 +88,19 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const [isSavingFile, setIsSavingFile] = useState(false);
   const [isNewFileModal, setIsNewFileModal] = useState(false);
   const [newFileName, setNewFileName] = useState("");
+  const [isNewDirModal, setIsNewDirModal] = useState(false);
+  const [newDirName, setNewDirName] = useState("");
+  const [isRenameModal, setIsRenameModal] = useState(false);
+  const [renameOldName, setRenameOldName] = useState("");
+  const [renameNewName, setRenameNewName] = useState("");
+  const [activeFileMenu, setActiveFileMenu] = useState<string | null>(null);
+  const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Backups State
+  const [backups, setBackups] = useState<Array<{ id: string; name: string; size: number; createdAt: string }>>([]);
+  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState<string | null>(null);
 
   // Startup State
   const [startupCmd, setStartupCmd] = useState(server.startupCommand || (server.category === "golang" ? "go run main.go" : "python3 main.py"));
@@ -199,11 +222,17 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     return () => clearInterval(interval);
   }, [server.id]);
 
+  // Keep page view steady at top when entering control panel
   useEffect(() => {
-    if (activeTab === "Console") {
-      consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, []);
+
+  // Only auto-scroll inside the console terminal container if enabled by user, never moving the window
+  useEffect(() => {
+    if (activeTab === "Console" && autoScrollLogs && consoleContainerRef.current) {
+      consoleContainerRef.current.scrollTop = consoleContainerRef.current.scrollHeight;
     }
-  }, [logs, activeTab]);
+  }, [logs, activeTab, autoScrollLogs]);
 
   const handleAction = async (action: "start" | "stop" | "restart") => {
     setIsActionLoading(true);
@@ -247,6 +276,9 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
       });
       if (res.ok) {
         await fetchLogs();
+        if (consoleContainerRef.current) {
+          consoleContainerRef.current.scrollTop = consoleContainerRef.current.scrollHeight;
+        }
       }
     } catch {
       // ignore
@@ -366,6 +398,155 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
       setFileContent(`# New file for ${server.name}\n`);
       setIsNewFileModal(false);
       setNewFileName("");
+      setIsEditorModalOpen(true);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleCreateNewDir = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDirName.trim()) return;
+    const cleanName = newDirName.trim();
+
+    try {
+      const res = await fetch(`/api/servers/${server.id}/directories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dirName: cleanName }),
+      });
+      if (res.ok) {
+        await fetchFiles();
+        setIsNewDirModal(false);
+        setNewDirName("");
+        onAddNotification?.({
+          id: `dir-${Date.now()}`,
+          title: "Directory Created",
+          titleBn: "ফোল্ডার তৈরি হয়েছে",
+          desc: `Created directory /${cleanName} in ${server.name}`,
+          descBn: `${server.name}-এ নতুন ফোল্ডার তৈরি হয়েছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRename = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renameNewName.trim() || !renameOldName) return;
+    try {
+      const res = await fetch(`/api/servers/${server.id}/files/rename`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldName: renameOldName, newName: renameNewName.trim() }),
+      });
+      if (res.ok) {
+        await fetchFiles();
+        if (selectedFile === renameOldName) {
+          setSelectedFile(renameNewName.trim());
+        }
+        setIsRenameModal(false);
+        setRenameOldName("");
+        setRenameNewName("");
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDownloadFile = (filename: string) => {
+    const filePath = `/api/servers/${server.id}/files/${encodeURIComponent(filename)}`;
+    fetch(filePath)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.content !== undefined) {
+          const blob = new Blob([data.content], { type: "text/plain;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      });
+  };
+
+  // Backups Handlers
+  const fetchBackups = async () => {
+    try {
+      const res = await fetch(`/api/servers/${server.id}/backups`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.backups)) setBackups(data.backups);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    setIsCreatingBackup(true);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/backups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        await fetchBackups();
+        onAddNotification?.({
+          id: `bkp-${Date.now()}`,
+          title: "Backup Created",
+          titleBn: "ব্যাকআপ তৈরি হয়েছে",
+          desc: `Full server backup snapshot stored safely for ${server.name}.`,
+          descBn: `${server.name}-এর ব্যাকআপ সংরক্ষণ করা হয়েছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+      }
+    } finally {
+      setIsCreatingBackup(false);
+    }
+  };
+
+  const handleRestoreBackup = async (backupId: string) => {
+    if (!confirm(lang === "bn" ? `আপনি কি ব্যাকআপ ${backupId} রিস্টোর করতে চান?` : `Restore server workspace to snapshot ${backupId}?`)) return;
+    setIsRestoringBackup(backupId);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/backups/${backupId}/restore`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await fetchFiles();
+        await fetchLogs();
+        onAddNotification?.({
+          id: `rst-${Date.now()}`,
+          title: "Backup Restored",
+          titleBn: "ব্যাকআপ রিস্টোর সম্পন্ন",
+          desc: `Workspace files restored from snapshot ${backupId}.`,
+          descBn: `ব্যাকআপ ফাইল সফলভাবে রিস্টোর করা হয়েছে।`,
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+      }
+    } finally {
+      setIsRestoringBackup(null);
+    }
+  };
+
+  const handleDeleteBackup = async (backupId: string) => {
+    if (!confirm(lang === "bn" ? `ব্যাকআপ মুছে ফেলতে চান?` : `Delete backup ${backupId}?`)) return;
+    try {
+      const res = await fetch(`/api/servers/${server.id}/backups/${backupId}`, { method: "DELETE" });
+      if (res.ok) {
+        await fetchBackups();
+      }
     } catch {
       // ignore
     }
@@ -475,6 +656,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const tabs: ControlPanelTab[] = [
     "Console",
     "Files",
+    "Backups",
     "Network",
     "Startup",
     "Settings",
@@ -484,10 +666,10 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   return (
     <div
       id="server-control-panel"
-      className="bg-[#111625] text-slate-100 min-h-screen -m-4 sm:-m-6 p-4 sm:p-6 pb-28 space-y-6"
+      className="bg-[#0e1320] text-slate-100 min-h-screen -m-4 sm:-m-6 p-4 sm:p-6 pb-28 space-y-6"
     >
       {/* 1. Top Breadcrumb & Return Nav */}
-      <div className="flex items-center justify-between gap-3 flex-wrap border-b border-slate-800 pb-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap border-b border-slate-800/80 pb-3">
         <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
           <button
             onClick={onBackToServers}
@@ -498,7 +680,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
           <button
             onClick={onBackToDetails}
-            className="hover:text-white transition-colors cursor-pointer"
+            className="hover:text-white transition-colors cursor-pointer font-medium"
           >
             {server.name}
           </button>
@@ -508,7 +690,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
         <div className="flex items-center gap-2">
           {allServers && allServers.length > 1 && (
-            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs">
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1 text-xs">
               <span className="text-slate-400 font-medium">{lang === "bn" ? "সার্ভার:" : "Server:"}</span>
               <select
                 value={server.id}
@@ -537,17 +719,20 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Top Navigation Tabs matching Screenshot 3 */}
-      <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-1 no-scrollbar border-b border-slate-800/80">
+      {/* 2. Top Navigation Tabs (Matching Screenshot 1 & 2) */}
+      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 no-scrollbar border-b border-slate-800/80">
         {tabs.map((tab) => {
           const isActive = activeTab === tab;
           return (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+              onClick={() => {
+                setActiveTab(tab);
+                if (tab === "Backups") fetchBackups();
+              }}
+              className={`px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 isActive
-                  ? "bg-[#251b4b] text-white shadow-xs border border-purple-500/40"
+                  ? "bg-[#251849] text-white shadow-sm border border-purple-500/50"
                   : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
               }`}
             >
@@ -557,111 +742,104 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
         })}
       </div>
 
-      {/* 3. Server Header & Primary Action Buttons (matching Screenshot 3) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              {server.name}
-            </h1>
-            <div
-              className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold tracking-wide uppercase border ${
-                isRunning
-                  ? "bg-emerald-950/80 text-emerald-400 border-emerald-600/40"
-                  : "bg-slate-800 text-slate-400 border-slate-700"
-              }`}
-            >
-              {isRunning ? "● RUNNING" : "● STOPPED"}
-            </div>
-          </div>
-          <p className="text-xs text-slate-400 mt-1 font-mono">
-            Node: EU-01 • UUID: {uuid} • Plan: {server.planName || "Mini-v1"}
-          </p>
-        </div>
-
-        {/* Action Buttons: Start, Restart, Stop (matching Screenshot 3 styles) */}
-        <div className="flex items-center gap-2.5">
-          {/* Start Button */}
-          <button
-            onClick={() => handleAction("start")}
-            disabled={isActionLoading || isRunning}
-            className={`px-5 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm ${
-              isRunning
-                ? "bg-[#33225f]/50 text-slate-500 cursor-not-allowed border border-purple-900/30"
-                : "bg-[#5438dc] hover:bg-[#6344f0] text-white active:scale-95 shadow-purple-900/30"
-            }`}
-          >
-            {isActionLoading && !isRunning ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Play className="w-4 h-4 fill-current" />
-            )}
-            <span>Start</span>
-          </button>
-
-          {/* Restart Button (Vibrant purple matching Screenshot 3) */}
-          <button
-            onClick={() => handleAction("restart")}
-            disabled={isActionLoading}
-            className="px-5 sm:px-6 py-2.5 rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
-          >
-            {isActionLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RotateCw className="w-4 h-4" />
-            )}
-            <span>Restart</span>
-          </button>
-
-          {/* Stop Button (Vibrant red matching Screenshot 3) */}
-          <button
-            onClick={() => handleAction("stop")}
-            disabled={isActionLoading || !isRunning}
-            className={`px-5 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm ${
-              !isRunning
-                ? "bg-red-950/40 text-red-400/40 cursor-not-allowed border border-red-900/20"
-                : "bg-[#dc2626] hover:bg-[#b91c1c] active:scale-95 text-white shadow-red-950/30"
-            }`}
-          >
-            {isActionLoading && isRunning ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Square className="w-4 h-4 fill-current" />
-            )}
-            <span>Stop</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 4. Tab Contents */}
-
-      {/* TAB 1: CONSOLE */}
+      {/* TAB 1: CONSOLE (Matching Screenshot 1) */}
       {activeTab === "Console" && (
         <div className="space-y-4">
-          {/* Live System Resource Stats Pill in Dark Mode */}
+          {/* Header Row: Server Name & 3 Action Buttons */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                {server.name}
+              </h1>
+              <div
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold tracking-wide uppercase border ${
+                  isRunning
+                    ? "bg-emerald-950/80 text-emerald-400 border-emerald-600/40"
+                    : "bg-slate-800 text-slate-400 border-slate-700"
+                }`}
+              >
+                {isRunning ? "● RUNNING" : "● STOPPED"}
+              </div>
+            </div>
+
+            {/* Action Buttons: Start, Restart, Stop (Matching Screenshot 1) */}
+            <div className="flex items-center gap-2.5">
+              {/* Start Button */}
+              <button
+                onClick={() => handleAction("start")}
+                disabled={isActionLoading || isRunning}
+                className={`px-6 sm:px-7 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
+                  isRunning
+                    ? "bg-[#2d2256]/60 text-purple-300/40 cursor-not-allowed border border-purple-900/30"
+                    : "bg-[#653bf0] hover:bg-[#7248f7] active:scale-95 text-white shadow-purple-950/30"
+                }`}
+              >
+                {isActionLoading && !isRunning ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                )}
+                <span>Start</span>
+              </button>
+
+              {/* Restart Button (Vibrant purple) */}
+              <button
+                onClick={() => handleAction("restart")}
+                disabled={isActionLoading}
+                className="px-6 sm:px-7 py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+              >
+                {isActionLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCw className="w-3.5 h-3.5" />
+                )}
+                <span>Restart</span>
+              </button>
+
+              {/* Stop Button (Vibrant red) */}
+              <button
+                onClick={() => handleAction("stop")}
+                disabled={isActionLoading || !isRunning}
+                className={`px-6 sm:px-7 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
+                  !isRunning
+                    ? "bg-red-950/30 text-red-400/30 cursor-not-allowed border border-red-900/20"
+                    : "bg-[#e50914] hover:bg-[#cc0812] active:scale-95 text-white shadow-red-950/30"
+                }`}
+              >
+                {isActionLoading && isRunning ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                )}
+                <span>Stop</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Live System Resource Stats Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-[#182035] border border-slate-800 rounded-xl p-3">
+            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">MEMORY</span>
               <span className="text-base sm:text-lg font-mono font-bold text-emerald-400">
                 {isRunning ? server.ramUsage || "141.88 MB" : "0.00 MB"}{" "}
                 <span className="text-xs text-slate-500 font-normal">/ 512 MB</span>
               </span>
             </div>
-            <div className="bg-[#182035] border border-slate-800 rounded-xl p-3">
+            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">CPU USAGE</span>
               <span className="text-base sm:text-lg font-mono font-bold text-red-400">
                 {isRunning ? server.cpuUsage || "46.36%" : "0.00%"}{" "}
                 <span className="text-xs text-slate-500 font-normal">/ 50%</span>
               </span>
             </div>
-            <div className="bg-[#182035] border border-slate-800 rounded-xl p-3">
+            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">DISK SPACE</span>
               <span className="text-base sm:text-lg font-mono font-bold text-sky-400">
                 {isRunning ? server.diskUsage || "86.27 MB" : "0.00 MB"}{" "}
                 <span className="text-xs text-slate-500 font-normal">/ 2 GB</span>
               </span>
             </div>
-            <div className="bg-[#182035] border border-slate-800 rounded-xl p-3">
+            <div className="bg-[#121828] border border-slate-800/80 rounded-xl p-3">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">NETWORK I/O</span>
               <span className="text-base sm:text-lg font-mono font-bold text-purple-400">
                 {isRunning ? "1.84 MB / 4.2 MB" : "0.00 KB"}
@@ -669,10 +847,10 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
             </div>
           </div>
 
-          {/* Console Output Screen */}
-          <div className="bg-[#0b0f19] border border-slate-800 rounded-2xl overflow-hidden shadow-xl flex flex-col h-[480px]">
+          {/* Console Terminal Container */}
+          <div className="bg-[#090d16] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[520px]">
             {/* Terminal Header */}
-            <div className="bg-[#121829] px-4 py-2.5 border-b border-slate-800 flex items-center justify-between gap-3 text-xs">
+            <div className="bg-[#111726] px-4 py-2.5 border-b border-slate-800/80 flex items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2">
                 <TerminalIcon className="w-4 h-4 text-purple-400" />
                 <span className="font-mono font-bold text-slate-300">
@@ -686,8 +864,27 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => {
+                    const next = !autoScrollLogs;
+                    setAutoScrollLogs(next);
+                    if (next && consoleContainerRef.current) {
+                      consoleContainerRef.current.scrollTop = consoleContainerRef.current.scrollHeight;
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border ${
+                    autoScrollLogs
+                      ? "bg-purple-950/80 text-purple-300 border-purple-600/50 hover:bg-purple-900/80"
+                      : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200"
+                  }`}
+                  title={autoScrollLogs ? "Auto-scroll is Enabled" : "Auto-scroll is Disabled"}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${autoScrollLogs ? "bg-emerald-400" : "bg-slate-500"}`} />
+                  <span>Auto-scroll</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleCopyLogs}
-                  className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
                   title="Copy Console Logs"
                 >
                   {isCopiedLogs ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -695,15 +892,18 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                 <button
                   type="button"
                   onClick={handleClearLogs}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition-colors cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition-colors cursor-pointer"
                 >
                   Clear
                 </button>
               </div>
             </div>
 
-            {/* Terminal Logs Output */}
-            <div className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-1.5 bg-[#080c14] text-slate-300 selection:bg-purple-900">
+            {/* Terminal Logs Area */}
+            <div
+              ref={consoleContainerRef}
+              className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-1.5 bg-[#060910] text-slate-300 selection:bg-purple-900"
+            >
               {logs.length === 0 ? (
                 <div className="text-slate-600 italic py-6 text-center">
                   [Container Initialized for {server.name}] Waiting for server logs. Type "help" or run a command below...
@@ -726,8 +926,8 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               <div ref={consoleEndRef} />
             </div>
 
-            {/* Terminal Command Input Prompt */}
-            <form onSubmit={handleSendCommand} className="bg-[#121829] border-t border-slate-800 p-2.5 flex items-center gap-2">
+            {/* Terminal Command Prompt Input */}
+            <form onSubmit={handleSendCommand} className="bg-[#111726] border-t border-slate-800/80 p-2.5 flex items-center gap-2">
               <span className="font-mono text-xs font-bold text-purple-400 px-1">$</span>
               <input
                 type="text"
@@ -738,7 +938,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
               >
                 <Send className="w-3 h-3" />
                 <span>Send</span>
@@ -748,129 +948,246 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
         </div>
       )}
 
-      {/* TAB 2: FILES */}
+      {/* TAB 2: FILES (Matching Screenshot 2) */}
       {activeTab === "Files" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-              <FolderOpen className="w-4 h-4 text-purple-400" />
-              <span>/home/container/user_servers/{server.id}/</span>
-              {selectedFile && <span className="text-white font-bold">{selectedFile}</span>}
+          {/* Top Bar: Path on Left & 3 Purple Action Buttons on Right */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            {/* Path Breadcrumb matching Screenshot 2: [ ] / home / container / */}
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-mono text-slate-300 bg-[#121828] border border-slate-800/80 px-3.5 py-2.5 rounded-xl">
+              <input
+                type="checkbox"
+                aria-label="Select All Files"
+                className="rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+              />
+              <span className="text-slate-500">/</span>
+              <span className="text-slate-400 hover:text-white cursor-pointer">home</span>
+              <span className="text-slate-500">/</span>
+              <span className="text-slate-200 font-semibold">container</span>
+              <span className="text-slate-500">/</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <label className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700">
-                {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-purple-400" />}
+            {/* 3 Purple Buttons matching Screenshot 2 */}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Create Directory Button */}
+              <button
+                onClick={() => setIsNewDirModal(true)}
+                className="px-4 sm:px-5 py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                <FolderPlus className="w-4 h-4" />
+                <span>Create Directory</span>
+              </button>
+
+              {/* Upload Button */}
+              <label className="px-4 sm:px-5 py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm">
+                {isUploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
                 <span>Upload</span>
                 <input type="file" onChange={handleUploadFile} className="hidden" />
               </label>
+
+              {/* New File Button */}
               <button
                 onClick={() => setIsNewFileModal(true)}
-                className="px-3 py-1.5 rounded-lg bg-[#5438dc] hover:bg-[#6344f0] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-4 sm:px-5 py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
                 <span>New File</span>
               </button>
-              <button
-                onClick={fetchFiles}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-                title="Refresh Files"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
-          {/* File Browser & Inline Editor Split */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* File List */}
-            <div className="bg-[#182035] border border-slate-800 rounded-2xl p-3 space-y-1">
-              <div className="text-[11px] font-bold text-slate-400 uppercase px-3 py-2 border-b border-slate-800/80 mb-1 flex items-center justify-between">
-                <span>Workspace Files ({files.length})</span>
-                <span className="text-[10px] text-purple-400 font-normal">server: {server.name}</span>
+          {/* Files List Cards (Stacked rounded cards matching Screenshot 2) */}
+          <div className="space-y-2.5 pt-1">
+            {files.length === 0 ? (
+              <div className="bg-[#121828] border border-slate-800 rounded-2xl p-10 text-center text-slate-500 italic text-sm">
+                No files found in workspace. Click "New File", "Create Directory", or "Upload".
               </div>
-              <div className="max-h-[420px] overflow-y-auto space-y-1 pr-1">
-                {files.length === 0 ? (
-                  <div className="text-slate-500 italic text-xs py-8 text-center">
-                    No files found. Click "New File" or "Upload".
-                  </div>
-                ) : (
-                  files.map((file) => {
-                    const isSelected = selectedFile === file.name;
-                    return (
-                      <button
-                        key={file.name}
+            ) : (
+              files.map((file) => {
+                const isDir = file.isDirectory;
+                const isMenuOpen = activeFileMenu === file.name;
+
+                return (
+                  <div
+                    key={file.name}
+                    className="bg-[#121828] hover:bg-[#161d30] border border-slate-800/90 hover:border-purple-500/40 rounded-xl px-4 py-3.5 flex items-center justify-between gap-3 transition-all group"
+                  >
+                    {/* Left: Checkbox + Icon + File Name */}
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${file.name}`}
+                        className="rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                      />
+
+                      <div
                         onClick={() => {
-                          setSelectedFile(file.name);
-                          loadFileContent(file.name);
+                          if (!isDir) {
+                            setSelectedFile(file.name);
+                            loadFileContent(file.name);
+                            setIsEditorModalOpen(true);
+                          }
                         }}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-mono transition-all text-left cursor-pointer ${
-                          isSelected
-                            ? "bg-purple-600/30 text-white border border-purple-500/40"
-                            : "text-slate-300 hover:bg-slate-800/60"
-                        }`}
+                        className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
                       >
-                        <div className="flex items-center gap-2.5 truncate">
-                          {file.name.endsWith(".py") || file.name.endsWith(".go") || file.name.endsWith(".js") ? (
-                            <FileCode className="w-4 h-4 text-yellow-400 shrink-0" />
-                          ) : (
-                            <FileText className="w-4 h-4 text-sky-400 shrink-0" />
-                          )}
-                          <span className="truncate">{file.name}</span>
-                        </div>
-                        <span className="text-[10px] text-slate-500 shrink-0 ml-2">
+                        {isDir ? (
+                          <Folder className="w-5 h-5 text-sky-400 shrink-0" />
+                        ) : file.name.endsWith(".py") || file.name.endsWith(".go") || file.name.endsWith(".js") ? (
+                          <FileCode className="w-5 h-5 text-purple-400 shrink-0" />
+                        ) : (
+                          <FileText className="w-5 h-5 text-slate-400 shrink-0" />
+                        )}
+
+                        <span className="font-mono text-sm text-slate-200 group-hover:text-white font-medium truncate">
+                          {file.name}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Right: File Size + Three-dot Menu */}
+                    <div className="flex items-center gap-3 shrink-0 relative">
+                      {!isDir && (
+                        <span className="text-xs font-mono text-slate-500 hidden sm:inline">
                           {(file.size / 1024).toFixed(1)} KB
                         </span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
+                      )}
 
-            {/* Code Editor */}
-            <div className="lg:col-span-2 bg-[#0b0f19] border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[460px]">
-              <div className="bg-[#121829] px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
-                <span className="font-mono text-xs font-bold text-purple-300 truncate max-w-[200px] sm:max-w-md">
-                  {selectedFile || "Select a file to edit"}
-                </span>
-                {selectedFile && (
-                  <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setActiveFileMenu(isMenuOpen ? null : file.name)}
+                        className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                        title="File actions"
+                      >
+                        <MoreHorizontal className="w-5 h-5" />
+                      </button>
+
+                      {/* Dropdown Menu */}
+                      {isMenuOpen && (
+                        <div className="absolute right-0 top-9 z-30 w-44 bg-[#1a2238] border border-slate-700 rounded-xl shadow-2xl py-1.5 text-xs font-medium text-slate-200">
+                          {!isDir && (
+                            <button
+                              onClick={() => {
+                                setSelectedFile(file.name);
+                                loadFileContent(file.name);
+                                setIsEditorModalOpen(true);
+                                setActiveFileMenu(null);
+                              }}
+                              className="w-full px-3.5 py-2 text-left hover:bg-purple-600/20 hover:text-white flex items-center gap-2 cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-purple-400" />
+                              <span>Edit File</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setRenameOldName(file.name);
+                              setRenameNewName(file.name);
+                              setIsRenameModal(true);
+                              setActiveFileMenu(null);
+                            }}
+                            className="w-full px-3.5 py-2 text-left hover:bg-purple-600/20 hover:text-white flex items-center gap-2 cursor-pointer"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
+                            <span>Rename</span>
+                          </button>
+                          {!isDir && (
+                            <button
+                              onClick={() => {
+                                handleDownloadFile(file.name);
+                                setActiveFileMenu(null);
+                              }}
+                              className="w-full px-3.5 py-2 text-left hover:bg-purple-600/20 hover:text-white flex items-center gap-2 cursor-pointer"
+                            >
+                              <Download className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Download</span>
+                            </button>
+                          )}
+                          <div className="my-1 border-t border-slate-700/60" />
+                          <button
+                            onClick={() => {
+                              handleDeleteFile(file.name);
+                              setActiveFileMenu(null);
+                            }}
+                            className="w-full px-3.5 py-2 text-left text-red-400 hover:bg-red-950/40 hover:text-red-300 flex items-center gap-2 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer matching Screenshot 2 */}
+          <div className="text-center py-6 text-xs text-slate-500 font-mono border-t border-slate-800/80 mt-8">
+            zero-bot.net © 2026 - now
+          </div>
+
+          {/* Create Directory Modal */}
+          {isNewDirModal && (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-[#182035] border border-slate-700 rounded-2xl p-6 max-w-sm w-full space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <FolderPlus className="w-4 h-4 text-purple-400" />
+                    <span>Create Directory</span>
+                  </h3>
+                  <button onClick={() => setIsNewDirModal(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <form onSubmit={handleCreateNewDir} className="space-y-4">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1.5">Directory Name</label>
+                    <input
+                      type="text"
+                      value={newDirName}
+                      onChange={(e) => setNewDirName(e.target.value)}
+                      placeholder="e.g. src or utils"
+                      className="w-full bg-[#0b0f19] border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-purple-500 focus:outline-hidden"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-2">
                     <button
-                      onClick={() => handleDeleteFile(selectedFile)}
-                      className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                      title="Delete File"
+                      type="button"
+                      onClick={() => setIsNewDirModal(false)}
+                      className="px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Delete</span>
+                      Cancel
                     </button>
                     <button
-                      onClick={handleSaveFile}
-                      disabled={isSavingFile}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                      type="submit"
+                      className="px-4 py-1.5 rounded-lg bg-[#6f42ec] hover:bg-[#7c4ef7] text-white text-xs font-semibold cursor-pointer"
                     >
-                      {isSavingFile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                      <span>Save File</span>
+                      Create
                     </button>
                   </div>
-                )}
+                </form>
               </div>
-
-              <textarea
-                value={fileContent}
-                onChange={(e) => setFileContent(e.target.value)}
-                disabled={!selectedFile}
-                placeholder="File contents will appear here..."
-                className="flex-1 bg-[#080c14] p-4 text-slate-200 font-mono text-xs resize-none focus:outline-hidden selection:bg-purple-900 border-0"
-              />
             </div>
-          </div>
+          )}
 
           {/* New File Modal */}
           {isNewFileModal && (
-            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
               <div className="bg-[#182035] border border-slate-700 rounded-2xl p-6 max-w-sm w-full space-y-4">
-                <h3 className="text-base font-bold text-white">Create New File</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-purple-400" />
+                    <span>Create New File</span>
+                  </h3>
+                  <button onClick={() => setIsNewFileModal(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
                 <form onSubmit={handleCreateNewFile} className="space-y-4">
                   <div>
                     <label className="text-xs text-slate-400 block mb-1.5">File Name</label>
@@ -887,13 +1204,13 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsNewFileModal(false)}
-                      className="px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700"
+                      className="px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-semibold hover:bg-purple-500"
+                      className="px-4 py-1.5 rounded-lg bg-[#6f42ec] hover:bg-[#7c4ef7] text-white text-xs font-semibold cursor-pointer"
                     >
                       Create
                     </button>
@@ -902,6 +1219,165 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               </div>
             </div>
           )}
+
+          {/* Rename Modal */}
+          {isRenameModal && (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-[#182035] border border-slate-700 rounded-2xl p-6 max-w-sm w-full space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-sky-400" />
+                    <span>Rename {renameOldName}</span>
+                  </h3>
+                  <button onClick={() => setIsRenameModal(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <form onSubmit={handleRename} className="space-y-4">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1.5">New Name</label>
+                    <input
+                      type="text"
+                      value={renameNewName}
+                      onChange={(e) => setRenameNewName(e.target.value)}
+                      className="w-full bg-[#0b0f19] border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-purple-500 focus:outline-hidden"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsRenameModal(false)}
+                      className="px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 rounded-lg bg-[#6f42ec] hover:bg-[#7c4ef7] text-white text-xs font-semibold cursor-pointer"
+                    >
+                      Rename
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Code Editor Modal / Drawer */}
+          {isEditorModalOpen && selectedFile && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+              <div className="bg-[#0b0f19] border border-slate-700 rounded-2xl max-w-4xl w-full h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+                {/* Editor Header */}
+                <div className="bg-[#121829] px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 truncate">
+                    <FileCode className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span className="font-mono text-xs sm:text-sm font-bold text-white truncate">
+                      {selectedFile}
+                    </span>
+                    <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded font-mono">
+                      /home/container/
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSaveFile}
+                      disabled={isSavingFile}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingFile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      <span>Save</span>
+                    </button>
+                    <button
+                      onClick={() => setIsEditorModalOpen(false)}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
+                      title="Close Editor"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Editor Content */}
+                <textarea
+                  value={fileContent}
+                  onChange={(e) => setFileContent(e.target.value)}
+                  placeholder="File contents..."
+                  className="flex-1 bg-[#060910] p-4 text-slate-200 font-mono text-xs sm:text-sm leading-relaxed resize-none focus:outline-hidden selection:bg-purple-900 border-0"
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2b: BACKUPS */}
+      {activeTab === "Backups" && (
+        <div className="space-y-4 max-w-4xl">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Archive className="w-5 h-5 text-purple-400" />
+                <span>Server Backups</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Create full snapshot archives of {server.name}'s workspace files.
+              </p>
+            </div>
+
+            <button
+              onClick={handleCreateBackup}
+              disabled={isCreatingBackup}
+              className="px-5 py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+            >
+              {isCreatingBackup ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+              <span>Create Backup</span>
+            </button>
+          </div>
+
+          <div className="space-y-2.5 pt-2">
+            {backups.length === 0 ? (
+              <div className="bg-[#121828] border border-slate-800 rounded-2xl p-10 text-center text-slate-500 italic text-sm">
+                No backup snapshots yet. Click "Create Backup" to generate a snapshot.
+              </div>
+            ) : (
+              backups.map((bkp) => (
+                <div
+                  key={bkp.id}
+                  className="bg-[#121828] border border-slate-800/90 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap"
+                >
+                  <div className="flex items-center gap-3">
+                    <Archive className="w-5 h-5 text-purple-400 shrink-0" />
+                    <div>
+                      <span className="font-mono text-sm text-slate-200 font-bold block">{bkp.name}</span>
+                      <span className="text-xs text-slate-500 font-mono">
+                        {(bkp.size / 1024).toFixed(1)} KB • {new Date(bkp.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleRestoreBackup(bkp.id)}
+                      disabled={isRestoringBackup === bkp.id}
+                      className="px-3.5 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-purple-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isRestoringBackup === bkp.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      <span>Restore</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBackup(bkp.id)}
+                      className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 text-xs cursor-pointer"
+                      title="Delete Backup"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 

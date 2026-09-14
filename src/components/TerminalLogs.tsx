@@ -32,8 +32,8 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
 
   // Auto-scroll when logs change
   useEffect(() => {
-    if (autoScroll && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (autoScroll && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [logs, autoScroll]);
 

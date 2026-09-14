@@ -1470,30 +1470,54 @@ app.get("/api/servers/:id/files", (req, res) => {
   try {
     const filenames = fs.readdirSync(sDir);
     const files = filenames
-      .filter((name) => name !== ".config.json" && !name.startsWith("."))
+      .filter((name) => name !== ".config.json")
       .map((name) => {
         const fullPath = path.join(sDir, name);
-        const stat = fs.statSync(fullPath);
-        return {
-          name,
-          size: stat.size,
-          modified: stat.mtime.toISOString(),
-          isDirectory: stat.isDirectory(),
-        };
-      });
+        try {
+          const stat = fs.statSync(fullPath);
+          return {
+            name,
+            size: stat.size,
+            modified: stat.mtime.toISOString(),
+            isDirectory: stat.isDirectory(),
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
 
-    // Also include .env if exists
-    if (fs.existsSync(path.join(sDir, ".env"))) {
-      const stat = fs.statSync(path.join(sDir, ".env"));
-      files.unshift({
-        name: ".env",
-        size: stat.size,
-        modified: stat.mtime.toISOString(),
-        isDirectory: false,
-      });
-    }
+    // Sort: directories first, then alphabetically
+    files.sort((a: any, b: any) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.localeCompare(b.name);
+    });
 
     res.json({ files });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6b. Create Directory in Server Workspace
+app.post("/api/servers/:id/directories", (req, res) => {
+  const { id } = req.params;
+  const { dirName } = req.body;
+  if (!dirName || typeof dirName !== "string") {
+    return res.status(400).json({ error: "Directory name is required" });
+  }
+
+  const sDir = getServerDir(id);
+  const safeName = path.basename(dirName.trim());
+  const targetPath = path.join(sDir, safeName);
+
+  try {
+    if (!fs.existsSync(targetPath)) {
+      fs.mkdirSync(targetPath, { recursive: true });
+      addServerLog(id, "system", `📁 Directory created: ${safeName}`);
+    }
+    res.json({ success: true, name: safeName });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1511,8 +1535,11 @@ app.get("/api/servers/:id/files/:filename", (req, res) => {
   }
 
   try {
-    const content = fs.readFileSync(filePath, "utf-8");
     const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      return res.status(400).json({ error: "Cannot read content of a directory" });
+    }
+    const content = fs.readFileSync(filePath, "utf-8");
     res.json({ name: safeName, content, size: stat.size });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1538,7 +1565,7 @@ app.put("/api/servers/:id/files/:filename", (req, res) => {
   }
 });
 
-// 9. Delete File
+// 9. Delete File or Directory
 app.delete("/api/servers/:id/files/:filename", (req, res) => {
   const { id, filename } = req.params;
   const sDir = getServerDir(id);
@@ -1547,14 +1574,38 @@ app.delete("/api/servers/:id/files/:filename", (req, res) => {
 
   if (fs.existsSync(filePath)) {
     try {
-      fs.unlinkSync(filePath);
-      addServerLog(id, "system", `🗑️ File deleted: ${safeName}`);
+      fs.rmSync(filePath, { recursive: true, force: true });
+      addServerLog(id, "system", `🗑️ Deleted: ${safeName}`);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   } else {
-    res.status(404).json({ error: "File not found" });
+    res.status(404).json({ error: "File or directory not found" });
+  }
+});
+
+// 9b. Rename File or Directory
+app.post("/api/servers/:id/files/rename", (req, res) => {
+  const { id } = req.params;
+  const { oldName, newName } = req.body;
+  if (!oldName || !newName) {
+    return res.status(400).json({ error: "oldName and newName are required" });
+  }
+  const sDir = getServerDir(id);
+  const oldPath = path.join(sDir, path.basename(oldName));
+  const newPath = path.join(sDir, path.basename(newName));
+
+  if (!fs.existsSync(oldPath)) {
+    return res.status(404).json({ error: "Original file not found" });
+  }
+
+  try {
+    fs.renameSync(oldPath, newPath);
+    addServerLog(id, "system", `✏️ Renamed ${path.basename(oldName)} to ${path.basename(newName)}`);
+    res.json({ success: true, name: path.basename(newName) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1580,6 +1631,108 @@ app.post("/api/servers/:id/files/upload", serverMulter.single("file"), (req, res
   }
   addServerLog(id, "system", `📁 File uploaded: ${req.file.originalname} (${req.file.size} bytes)`);
   res.json({ success: true, filename: req.file.originalname, size: req.file.size });
+});
+
+// 10b. Server Backups
+const getBackupsDir = (id: string) => {
+  const bDir = path.join(getServerDir(id), ".backups");
+  if (!fs.existsSync(bDir)) fs.mkdirSync(bDir, { recursive: true });
+  return bDir;
+};
+
+app.get("/api/servers/:id/backups", (req, res) => {
+  const { id } = req.params;
+  try {
+    const bDir = getBackupsDir(id);
+    const filenames = fs.readdirSync(bDir);
+    const backups = filenames
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => {
+        const fullPath = path.join(bDir, f);
+        const stat = fs.statSync(fullPath);
+        return {
+          id: f.replace(".json", ""),
+          name: f,
+          size: stat.size,
+          createdAt: stat.mtime.toISOString(),
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json({ backups });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/servers/:id/backups", (req, res) => {
+  const { id } = req.params;
+  const { backupName } = req.body;
+  const sDir = getServerDir(id);
+  const bDir = getBackupsDir(id);
+
+  try {
+    const files = fs.readdirSync(sDir);
+    const archiveData: Record<string, string> = {};
+
+    for (const file of files) {
+      if (file === ".config.json" || file === ".backups") continue;
+      const filePath = path.join(sDir, file);
+      const stat = fs.statSync(filePath);
+      if (stat.isFile()) {
+        archiveData[file] = fs.readFileSync(filePath, "utf-8");
+      }
+    }
+
+    const name = (backupName?.trim() || `backup_${new Date().toISOString().replace(/[:.]/g, "-")}`).replace(/[^a-zA-Z0-9_-]/g, "");
+    const backupFile = path.join(bDir, `${name}.json`);
+    fs.writeFileSync(backupFile, JSON.stringify(archiveData, null, 2), "utf-8");
+    addServerLog(id, "system", `💾 Backup snapshot created: ${name}.json`);
+
+    res.json({ success: true, backup: { id: name, name: `${name}.json`, createdAt: new Date().toISOString() } });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/servers/:id/backups/:backupId/restore", (req, res) => {
+  const { id, backupId } = req.params;
+  const sDir = getServerDir(id);
+  const bDir = getBackupsDir(id);
+  const backupFile = path.join(bDir, `${path.basename(backupId)}.json`);
+
+  if (!fs.existsSync(backupFile)) {
+    return res.status(404).json({ error: "Backup snapshot not found" });
+  }
+
+  try {
+    const raw = fs.readFileSync(backupFile, "utf-8");
+    const data = JSON.parse(raw);
+
+    for (const [filename, content] of Object.entries(data)) {
+      const filePath = path.join(sDir, path.basename(filename));
+      fs.writeFileSync(filePath, content as string, "utf-8");
+    }
+
+    addServerLog(id, "system", `🔄 Restored server workspace from backup: ${backupId}`);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/servers/:id/backups/:backupId", (req, res) => {
+  const { id, backupId } = req.params;
+  const bDir = getBackupsDir(id);
+  const backupFile = path.join(bDir, `${path.basename(backupId)}.json`);
+
+  if (fs.existsSync(backupFile)) {
+    fs.unlinkSync(backupFile);
+    addServerLog(id, "system", `🗑️ Backup removed: ${backupId}`);
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ error: "Backup not found" });
+  }
 });
 
 // 11. Server Logs
