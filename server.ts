@@ -1212,57 +1212,71 @@ function getOptimizedProcEnv(server: ServerRecord, config: any, sDir: string) {
 // Automatic dependency installer for requirements.txt, package.json, go.mod
 function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: any, onComplete?: (success: boolean) => void) {
   const env = procEnv || { ...process.env, PYTHONUNBUFFERED: "1" };
-  const reqFile = path.join(sDir, "requirements.txt");
-  const pkgFile = path.join(sDir, "package.json");
-  const goModFile = path.join(sDir, "go.mod");
 
-  if (fs.existsSync(reqFile) && fs.readFileSync(reqFile, "utf-8").trim().length > 0) {
-    addServerLog(serverId, "pip", `📦 [Pip Manager] Scanning requirements.txt & installing dependencies...`);
-    const pipCmd = `pip3 install --no-cache-dir --prefer-binary -r "${reqFile}"`;
-    exec(pipCmd, { cwd: sDir, env }, (err, stdout, stderr) => {
-      if (stdout) {
-        const lines = stdout.split("\n").filter((l) => l.trim().length > 0 && !l.includes("WARNING: Running pip as the 'root'"));
-        for (const l of lines) {
-          addServerLog(serverId, "pip", l);
+  try {
+    const dirFiles = fs.readdirSync(sDir);
+    const reqFileName = dirFiles.find((f) => f.toLowerCase() === "requirements.txt" || f.toLowerCase() === "requirement.txt");
+    const pkgFileName = dirFiles.find((f) => f.toLowerCase() === "package.json");
+    const goModFileName = dirFiles.find((f) => f.toLowerCase() === "go.mod");
+
+    if (reqFileName) {
+      const reqFile = path.join(sDir, reqFileName);
+      const reqContent = fs.readFileSync(reqFile, "utf-8");
+      const pkgs = reqContent.split("\n").map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith("#"));
+
+      if (pkgs.length > 0) {
+        addServerLog(serverId, "pip", `📦 [Pip Manager] Found ${reqFileName} with ${pkgs.length} package(s): ${pkgs.slice(0, 5).join(", ")}${pkgs.length > 5 ? "..." : ""}`);
+        addServerLog(serverId, "pip", `⚙️ [Pip Manager] Installing dependencies into Python environment...`);
+
+        const pipCmd = `python3 -m pip install --no-cache-dir --prefer-binary --break-system-packages -r "${reqFile}"`;
+        exec(pipCmd, { cwd: sDir, env }, (err, stdout, stderr) => {
+          if (stdout) {
+            const lines = stdout.split("\n").filter((l) => l.trim().length > 0 && !l.includes("WARNING: Running pip as the 'root'") && !l.includes("Use the --root-user-action option"));
+            for (const l of lines) {
+              addServerLog(serverId, "pip", l);
+            }
+          }
+          if (stderr && stderr.trim().length > 0) {
+            const errLines = stderr.split("\n").filter((l) => l.trim().length > 0 && !l.includes("WARNING: Running pip as the 'root'") && !l.includes("Use the --root-user-action option"));
+            for (const l of errLines) {
+              addServerLog(serverId, "stderr", l);
+            }
+          }
+          if (err) {
+            addServerLog(serverId, "stderr", `⚠️ Pip installation finished with notice: ${err.message}`);
+            onComplete?.(false);
+          } else {
+            addServerLog(serverId, "pip", `✅ [Pip Manager] All requirements successfully installed & ready.`);
+            onComplete?.(true);
+          }
+        });
+        return;
+      }
+    }
+
+    if (pkgFileName) {
+      addServerLog(serverId, "system", `📦 [NPM Manager] Running npm install...`);
+      exec("npm install --prefer-offline --no-audit", { cwd: sDir, env }, (err, stdout) => {
+        if (stdout) addServerLog(serverId, "stdout", stdout.trim());
+        if (err) {
+          addServerLog(serverId, "stderr", `NPM install notice: ${err.message}`);
+          onComplete?.(false);
+        } else {
+          addServerLog(serverId, "system", `✅ [NPM Manager] Packages installed.`);
+          onComplete?.(true);
         }
-      }
-      if (stderr && stderr.trim().length > 0) {
-        const errLines = stderr.split("\n").filter((l) => l.trim().length > 0 && !l.includes("WARNING: Running pip as the 'root'"));
-        for (const l of errLines) {
-          addServerLog(serverId, "stderr", l);
-        }
-      }
-      if (err) {
-        addServerLog(serverId, "stderr", `⚠️ Pip installation notice: ${err.message}`);
-        onComplete?.(false);
-      } else {
-        addServerLog(serverId, "pip", `✅ [Pip Manager] All requirements successfully installed & ready.`);
-        onComplete?.(true);
-      }
-    });
-    return;
-  }
+      });
+      return;
+    }
 
-  if (fs.existsSync(pkgFile)) {
-    addServerLog(serverId, "system", `📦 [NPM Manager] Running npm install...`);
-    exec("npm install --prefer-offline --no-audit", { cwd: sDir, env }, (err, stdout, stderr) => {
-      if (stdout) addServerLog(serverId, "stdout", stdout.trim());
-      if (err) {
-        addServerLog(serverId, "stderr", `NPM install notice: ${err.message}`);
-        onComplete?.(false);
-      } else {
-        addServerLog(serverId, "system", `✅ [NPM Manager] Packages installed.`);
+    if (goModFileName) {
+      exec("go mod tidy", { cwd: sDir, env }, () => {
         onComplete?.(true);
-      }
-    });
-    return;
-  }
-
-  if (fs.existsSync(goModFile)) {
-    exec("go mod tidy", { cwd: sDir, env }, () => {
-      onComplete?.(true);
-    });
-    return;
+      });
+      return;
+    }
+  } catch (err: any) {
+    addServerLog(serverId, "stderr", `Dependency scan error: ${err.message}`);
   }
 
   onComplete?.(true);
@@ -1670,45 +1684,48 @@ const serverMulter = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-app.post("/api/servers/:id/files/upload", serverMulter.single("file"), (req, res) => {
+app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), (req, res) => {
   const { id } = req.params;
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
+  const rawFiles = (req.files as Express.Multer.File[]) || (req.file ? [req.file] : []);
+  if (!rawFiles || rawFiles.length === 0) {
+    return res.status(400).json({ error: "No files uploaded" });
   }
 
+  // Limit to max 10 files
+  const uploadedFiles = rawFiles.slice(0, 10);
   const sDir = getServerDir(id);
-  const uploadedName = req.file.originalname;
-  const isZip = uploadedName.toLowerCase().endsWith(".zip");
+  const uploadedNames: string[] = [];
 
-  addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${req.file.size} bytes)`);
+  let hasZip = false;
+  let hasReqs = false;
 
-  if (isZip) {
-    addServerLog(id, "system", `📦 Auto-extracting ZIP archive: ${uploadedName}...`);
-    exec(`unzip -o "${req.file.path}" -d "${sDir}"`, { cwd: sDir }, (unzipErr, stdout) => {
-      if (unzipErr) {
-        addServerLog(id, "stderr", `⚠️ Unzip error: ${unzipErr.message}`);
-      } else {
-        addServerLog(id, "system", `✅ ZIP contents successfully extracted.`);
-        const servers = getServersData();
-        const server = servers.find((s) => s.id === id);
-        if (server) {
-          const config = getServerConfig(id, server);
-          const procEnv = getOptimizedProcEnv(server, config, sDir);
-          checkAndInstallDependencies(id, sDir, procEnv);
+  for (const f of uploadedFiles) {
+    const uploadedName = f.originalname;
+    uploadedNames.push(uploadedName);
+    const isZip = uploadedName.toLowerCase().endsWith(".zip");
+    if (isZip) hasZip = true;
+    if (uploadedName === "requirements.txt" || uploadedName === "package.json") hasReqs = true;
+
+    addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${f.size} bytes)`);
+
+    if (isZip) {
+      addServerLog(id, "system", `📦 Auto-extracting ZIP archive: ${uploadedName}...`);
+      exec(`unzip -o "${f.path}" -d "${sDir}"`, { cwd: sDir }, (unzipErr) => {
+        if (unzipErr) {
+          addServerLog(id, "stderr", `⚠️ Unzip error: ${unzipErr.message}`);
+        } else {
+          addServerLog(id, "system", `✅ ZIP contents successfully extracted.`);
         }
-      }
-    });
-  } else if (uploadedName === "requirements.txt" || uploadedName === "package.json") {
-    const servers = getServersData();
-    const server = servers.find((s) => s.id === id);
-    if (server) {
-      const config = getServerConfig(id, server);
-      const procEnv = getOptimizedProcEnv(server, config, sDir);
-      checkAndInstallDependencies(id, sDir, procEnv);
+      });
     }
   }
 
-  res.json({ success: true, filename: uploadedName, size: req.file.size });
+  res.json({
+    success: true,
+    count: uploadedFiles.length,
+    filenames: uploadedNames,
+    message: `${uploadedFiles.length} file(s) uploaded successfully`,
+  });
 });
 
 // 10a. Explicit Dependency Install Trigger

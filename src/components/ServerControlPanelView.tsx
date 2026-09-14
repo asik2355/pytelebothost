@@ -429,12 +429,20 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   };
 
   const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const rawFiles = e.target.files;
+    if (!rawFiles || rawFiles.length === 0) return;
+
+    const fileList: File[] = Array.from(rawFiles);
+    // Limit to max 10 files at a time
+    const filesToUpload = fileList.slice(0, 10);
+    const hasMoreThan10 = fileList.length > 10;
+
     setIsUploading(true);
-    const isReqsOrZip = file.name === "requirements.txt" || file.name.endsWith(".zip");
     const formData = new FormData();
-    formData.append("file", file);
+    for (const file of filesToUpload) {
+      formData.append("files", file);
+    }
+
     try {
       const res = await fetch(`/api/servers/${server.id}/files/upload`, {
         method: "POST",
@@ -442,22 +450,30 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
       });
       if (res.ok) {
         await fetchFiles();
-        setSelectedFile(file.name);
-        loadFileContent(file.name);
+        const firstFile = filesToUpload[0];
+        if (firstFile) {
+          setSelectedFile(firstFile.name);
+          loadFileContent(firstFile.name);
+        }
+
+        const namesSummary = filesToUpload.map((f) => f.name).join(", ");
         onAddNotification?.({
           id: `upload-${Date.now()}`,
-          title: isReqsOrZip ? "File Uploaded & Processing Dependencies" : "File Uploaded",
-          titleBn: isReqsOrZip ? "ফাইল আপলোড হয়েছে ও প্যাকেজ প্রসেস হচ্ছে" : "ফাইল আপলোড হয়েছে",
-          desc: isReqsOrZip ? `Uploaded ${file.name}. Libraries are being installed.` : `Uploaded ${file.name} to ${server.name}.`,
-          descBn: isReqsOrZip ? `${file.name} আপলোড হয়েছে এবং প্যাকেজসমূহ ইনস্টল হচ্ছে।` : `${file.name} সার্ভার ${server.name}-এ আপলোড হয়েছে।`,
+          title: filesToUpload.length > 1 ? `${filesToUpload.length} Files Uploaded` : "File Uploaded",
+          titleBn: filesToUpload.length > 1 ? `${filesToUpload.length}টি ফাইল আপলোড হয়েছে` : "ফাইল আপলোড হয়েছে",
+          desc: hasMoreThan10
+            ? `Uploaded ${filesToUpload.length} files (Max limit 10): ${namesSummary}`
+            : `Uploaded ${filesToUpload.length} file(s): ${namesSummary}`,
+          descBn: hasMoreThan10
+            ? `সর্বোচ্চ ১০টি ফাইল আপলোড হয়েছে: ${namesSummary}`
+            : `${filesToUpload.length}টি ফাইল সফলভাবে আপলোড হয়েছে: ${namesSummary}`,
           timestamp: new Date().toISOString(),
           type: "system",
           read: false,
         });
-        if (isReqsOrZip) {
-          setTimeout(fetchLogs, 1500);
-        }
       }
+    } catch {
+      // ignore
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -993,10 +1009,10 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
       {/* TAB 2: FILES (Matching Screenshot 2) */}
       {activeTab === "Files" && (
         <div className="space-y-4">
-          {/* Top Bar: Path on Left & 3 Purple Action Buttons on Right */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            {/* Path Breadcrumb matching Screenshot 2: [ ] / home / container / */}
-            <div className="flex items-center gap-2 text-xs sm:text-sm font-mono text-slate-300 bg-[#121828] border border-slate-800/80 px-3.5 py-2.5 rounded-xl">
+          {/* Top Bar: Path on Left & 3 Action Buttons in One Row */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-1">
+            {/* Path Breadcrumb: [ ] / home / container / */}
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-mono text-slate-300 bg-[#121828] border border-slate-800/80 px-3.5 py-2.5 rounded-xl shrink-0">
               <input
                 type="checkbox"
                 aria-label="Select All Files"
@@ -1009,64 +1025,45 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               <span className="text-slate-500">/</span>
             </div>
 
-            {/* Actions Toolbar */}
-            <div className="flex items-center gap-2.5 flex-wrap">
-              {/* Install Packages Button */}
-              {files.some((f) => f.name === "requirements.txt" || f.name === "package.json") && (
-                <button
-                  type="button"
-                  onClick={handleInstallDependencies}
-                  disabled={isInstallingDeps}
-                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 active:scale-95 text-emerald-300 hover:text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
-                  title="Install all libraries from requirements.txt / package.json"
-                >
-                  {isInstallingDeps ? (
-                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
-                  ) : (
-                    <Zap className="w-4 h-4 text-emerald-400" />
-                  )}
-                  <span>{isInstallingDeps ? "Installing..." : "Install Pip Reqs"}</span>
-                </button>
-              )}
-
+            {/* Actions Toolbar - Always Single Row */}
+            <div className="flex items-center gap-1.5 sm:gap-2.5 w-full lg:w-auto">
               {/* Refresh Files Button */}
               <button
                 type="button"
                 onClick={() => fetchFiles(false)}
                 disabled={isRefreshingFiles}
-                className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-[#1e263d] hover:bg-[#25304c] border border-slate-700/80 active:scale-95 text-slate-200 hover:text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+                className="p-2 sm:px-3 sm:py-2.5 rounded-xl bg-[#1e263d] hover:bg-[#25304c] border border-slate-700/80 active:scale-95 text-slate-200 hover:text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-sm disabled:opacity-50"
                 title="Refresh Files"
               >
                 <RefreshCw className={`w-4 h-4 text-sky-400 ${isRefreshingFiles ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Refresh</span>
               </button>
 
               {/* Create Directory Button */}
               <button
                 onClick={() => setIsNewDirModal(true)}
-                className="px-4 sm:px-5 py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                className="flex-1 sm:flex-initial px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer shadow-sm"
               >
-                <FolderPlus className="w-4 h-4" />
+                <FolderPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span>Create Directory</span>
               </button>
 
               {/* Upload Button */}
-              <label className="px-4 sm:px-5 py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm">
+              <label className="flex-1 sm:flex-initial px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer shadow-sm">
                 {isUploading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin shrink-0" />
                 ) : (
-                  <Upload className="w-4 h-4" />
+                  <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 )}
                 <span>Upload</span>
-                <input type="file" onChange={handleUploadFile} className="hidden" />
+                <input type="file" multiple onChange={handleUploadFile} className="hidden" />
               </label>
 
               {/* New File Button */}
               <button
                 onClick={() => setIsNewFileModal(true)}
-                className="px-4 sm:px-5 py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                className="flex-1 sm:flex-initial px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-[#6f42ec] hover:bg-[#7c4ef7] active:scale-95 text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer shadow-sm"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span>New File</span>
               </button>
             </div>
@@ -1127,12 +1124,6 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                         <span className="font-mono text-sm text-slate-200 group-hover:text-white font-medium truncate">
                           {file.name}
                         </span>
-
-                        {isReqs && (
-                          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                            Auto-pip
-                          </span>
-                        )}
                       </div>
                     </div>
 
@@ -1215,7 +1206,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
           {/* Footer matching Screenshot 2 */}
           <div className="text-center py-6 text-xs text-slate-500 font-mono border-t border-slate-800/80 mt-8">
-            zero-bot.net © 2026 - now
+            bot-host.xyz © 2026 - now
           </div>
 
           {/* Create Directory Modal */}

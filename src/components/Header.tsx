@@ -117,18 +117,6 @@ export const Header: React.FC<HeaderProps> = ({
             <span>{lang === "bn" ? "English" : "বাংলা"}</span>
           </button>
 
-          {/* Install Requirements Button */}
-          <button
-            id="install-reqs-btn"
-            onClick={onInstall}
-            disabled={isActionLoading || isInstalling}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-            title={lang === "bn" ? "requirements.txt এর প্যাকেজ ইনস্টল করুন" : "Install packages from requirements.txt"}
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span>{lang === "bn" ? "প্যাকেজ ইনস্টল (pip)" : "Install Pip Reqs"}</span>
-          </button>
-
           {/* Start or Stop Bot */}
           {isRunning ? (
             <>
