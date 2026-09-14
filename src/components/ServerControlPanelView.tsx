@@ -33,6 +33,7 @@ import {
   X,
   Archive,
   File,
+  Database,
 } from "lucide-react";
 import { ActiveServer, AppNotification, BotLog, WorkspaceFile } from "../types";
 
@@ -98,6 +99,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<string | null>(null);
   const [isDeletingFile, setIsDeletingFile] = useState(false);
+  const [isRefreshingFiles, setIsRefreshingFiles] = useState(false);
 
   // Backups State
   const [backups, setBackups] = useState<Array<{ id: string; name: string; size: number; createdAt: string }>>([]);
@@ -176,28 +178,26 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   };
 
   // Fetch per-server files
-  const fetchFiles = async () => {
+  const fetchFiles = async (silent = false) => {
+    if (!silent) setIsRefreshingFiles(true);
     try {
       const res = await fetch(`/api/servers/${server.id}/files`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.files)) {
           setFiles(data.files);
-          if (data.files.length > 0) {
-            setSelectedFile((prev) => {
-              const stillExists = data.files.some((f: any) => f.name === prev);
-              const nextFile = stillExists && prev ? prev : data.files[0].name;
-              loadFileContent(nextFile);
-              return nextFile;
-            });
-          } else {
-            setSelectedFile(null);
-            setFileContent("");
-          }
+          setSelectedFile((prev) => {
+            if (prev && data.files.some((f: any) => f.name === prev)) {
+              return prev;
+            }
+            return data.files.length > 0 ? data.files[0].name : null;
+          });
         }
       }
     } catch {
       // ignore
+    } finally {
+      if (!silent) setIsRefreshingFiles(false);
     }
   };
 
@@ -223,6 +223,17 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     const interval = setInterval(fetchLogs, 2500);
     return () => clearInterval(interval);
   }, [server.id]);
+
+  // Auto-refresh file list when on Files tab or when server is running
+  useEffect(() => {
+    if (activeTab === "Files") {
+      fetchFiles(true);
+      const filesInterval = setInterval(() => {
+        fetchFiles(true);
+      }, 3000);
+      return () => clearInterval(filesInterval);
+    }
+  }, [activeTab, server.id]);
 
   // Keep page view steady at top when entering control panel
   useEffect(() => {
@@ -962,8 +973,20 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               <span className="text-slate-500">/</span>
             </div>
 
-            {/* 3 Purple Buttons matching Screenshot 2 */}
+            {/* Actions Toolbar */}
             <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Refresh Files Button */}
+              <button
+                type="button"
+                onClick={() => fetchFiles(false)}
+                disabled={isRefreshingFiles}
+                className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-[#1e263d] hover:bg-[#25304c] border border-slate-700/80 active:scale-95 text-slate-200 hover:text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+                title="Refresh Files"
+              >
+                <RefreshCw className={`w-4 h-4 text-sky-400 ${isRefreshingFiles ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+
               {/* Create Directory Button */}
               <button
                 onClick={() => setIsNewDirModal(true)}
@@ -1005,6 +1028,9 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
               files.map((file) => {
                 const isDir = file.isDirectory;
                 const isMenuOpen = activeFileMenu === file.name;
+                const isDb = file.name.endsWith(".db") || file.name.endsWith(".sqlite") || file.name.endsWith(".sqlite3") || file.name.endsWith(".sql");
+                const isJson = file.name.endsWith(".json");
+                const isCode = file.name.endsWith(".py") || file.name.endsWith(".go") || file.name.endsWith(".js") || file.name.endsWith(".ts");
 
                 return (
                   <div
@@ -1031,7 +1057,11 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                       >
                         {isDir ? (
                           <Folder className="w-5 h-5 text-sky-400 shrink-0" />
-                        ) : file.name.endsWith(".py") || file.name.endsWith(".go") || file.name.endsWith(".js") ? (
+                        ) : isDb ? (
+                          <Database className="w-5 h-5 text-emerald-400 shrink-0" />
+                        ) : isJson ? (
+                          <FileCode className="w-5 h-5 text-amber-400 shrink-0" />
+                        ) : isCode ? (
                           <FileCode className="w-5 h-5 text-purple-400 shrink-0" />
                         ) : (
                           <FileText className="w-5 h-5 text-slate-400 shrink-0" />
