@@ -6,6 +6,7 @@ import { ServicesPageView } from "./components/ServicesPageView";
 import { BillingPageView } from "./components/BillingPageView";
 import { BotStorePageView } from "./components/BotStorePageView";
 import { MyServersPageView } from "./components/MyServersPageView";
+import { ReferralPageView } from "./components/ReferralPageView";
 import { ServerDetailView } from "./components/ServerDetailView";
 import { ServerControlPanelView } from "./components/ServerControlPanelView";
 import { AuthPageView } from "./components/AuthPageView";
@@ -79,13 +80,14 @@ export default function App() {
     setNotifications([]);
   }, []);
 
-  // Router state: HOME, SERVICES, BILLING, BOT STORE, MY SERVERS, LOGIN, REGISTRATION
+  // Router state: HOME, SERVICES, BILLING, BOT STORE, MY SERVERS, REFERRAL, LOGIN, REGISTRATION
   const [currentRoute, setCurrentRoute] = useState<NavRoute>(() => {
     const path = window.location.pathname;
     if (path === "/services" || path === "/service") return "/services";
     if (path === "/billing") return "/billing";
     if (path === "/bot-store") return "/bot-store";
     if (path === "/my-servers") return "/my-servers";
+    if (path === "/referral" || path === "/referrals" || path === "/affiliate") return "/referral";
     if (path === "/login") return "/login";
     if (path === "/registration" || path === "/register") return "/registration";
     return "/home";
@@ -98,6 +100,7 @@ export default function App() {
     else if (route === "/billing") normalized = "/billing";
     else if (route === "/bot-store") normalized = "/bot-store";
     else if (route === "/my-servers") normalized = "/my-servers";
+    else if (route === "/referral" || route === "/referrals" || route === "/affiliate") normalized = "/referral";
     else if (route === "/login") normalized = "/login";
     else if (route === "/registration" || route === "/register") normalized = "/registration";
     else normalized = "/home";
@@ -124,6 +127,7 @@ export default function App() {
       else if (path === "/billing") setCurrentRoute("/billing");
       else if (path === "/bot-store") setCurrentRoute("/bot-store");
       else if (path === "/my-servers") setCurrentRoute("/my-servers");
+      else if (path === "/referral" || path === "/referrals" || path === "/affiliate") setCurrentRoute("/referral");
       else if (path === "/login") setCurrentRoute("/login");
       else if (path === "/registration" || path === "/register") setCurrentRoute("/registration");
       else setCurrentRoute("/home");
@@ -729,7 +733,18 @@ export default function App() {
               />
             )}
 
-            {/* Route 6: LOGIN (/login) */}
+            {/* Route 6: REFERRAL (/referral) */}
+            {currentRoute === "/referral" && (
+              <ReferralPageView
+                lang={lang}
+                currentUser={currentUser}
+                walletBalance={walletBalance}
+                onNavigate={navigateTo}
+                onAddNotification={handleAddNotification}
+              />
+            )}
+
+            {/* Route 7: LOGIN (/login) */}
             {currentRoute === "/login" && (
               <AuthPageView
                 initialMode="login"
@@ -739,7 +754,7 @@ export default function App() {
               />
             )}
 
-            {/* Route 7: REGISTRATION (/registration) */}
+            {/* Route 8: REGISTRATION (/registration) */}
             {currentRoute === "/registration" && (
               <AuthPageView
                 initialMode="registration"

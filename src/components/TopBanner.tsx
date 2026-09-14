@@ -77,9 +77,8 @@ export const TopBanner: React.FC<TopBannerProps> = ({
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<
-    null | "help" | "affiliate" | "rewards" | "settings"
+    null | "help" | "rewards" | "settings"
   >(null);
-  const [copiedAffiliate, setCopiedAffiliate] = useState(false);
   const [rewardClaimed, setRewardClaimed] = useState(false);
 
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -646,16 +645,24 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                       <span>Help Center</span>
                     </button>
 
-                    {/* 6. Affiliate Program */}
+                    {/* 6. Referral Program */}
                     <button
                       onClick={() => {
                         setIsMenuOpen(false);
-                        setActiveModal("affiliate");
+                        onNavigate("/referral");
                       }}
-                      className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
+                      className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        currentRoute === "/referral"
+                          ? "bg-[#f2effe] text-[#5a36db] font-semibold relative before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:bg-[#5a36db] before:rounded-r"
+                          : "text-slate-700 hover:bg-slate-50"
+                      }`}
                     >
-                      <UserPlus className="w-5 h-5 text-slate-600" />
-                      <span>Affiliate Program</span>
+                      <UserPlus
+                        className={`w-5 h-5 ${
+                          currentRoute === "/referral" ? "text-[#6342db]" : "text-slate-600"
+                        }`}
+                      />
+                      <span>Referral Program</span>
                     </button>
 
                     {/* 7. Claim Rewards */}
@@ -761,60 +768,6 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                       <span className="text-slate-500 text-[11px]">support@bot-host.xyz</span>
                     </div>
                     <span className="text-slate-400 text-[11px]">Active</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setActiveModal(null)}
-                  className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs"
-                >
-                  Close
-                </button>
-              </div>
-            )}
-
-            {/* Modal: Affiliate Program */}
-            {activeModal === "affiliate" && (
-              <div className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                      <UserPlus className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-base">Affiliate Program</h3>
-                      <p className="text-xs text-slate-400">Earn 10% Lifetime Commission</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setActiveModal(null)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Share your referral link with friends. Whenever they recharge or buy a hosting plan, you get 10% cash bonus added to your balance.
-                </p>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700">Your Referral Link</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value="https://bot-host.xyz/?ref=asikgamer"
-                      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-mono select-all"
-                    />
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText("https://bot-host.xyz/?ref=asikgamer");
-                        setCopiedAffiliate(true);
-                        setTimeout(() => setCopiedAffiliate(false), 2000);
-                      }}
-                      className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                    >
-                      {copiedAffiliate ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      <span>{copiedAffiliate ? "Copied" : "Copy"}</span>
-                    </button>
                   </div>
                 </div>
                 <button

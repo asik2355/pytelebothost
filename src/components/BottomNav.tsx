@@ -7,6 +7,7 @@ export type NavRoute =
   | "/billing"
   | "/bot-store"
   | "/my-servers"
+  | "/referral"
   | "/login"
   | "/registration";
 

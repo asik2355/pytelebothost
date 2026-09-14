@@ -374,6 +374,31 @@ export const BillingPageView: React.FC<BillingPageViewProps> = ({
         </div>
       </div>
 
+      {/* Referral Program Banner */}
+      <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 border border-emerald-200/80 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+            <UserPlus className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-slate-900">
+              {lang === "bn" ? "রেফারেল প্রোগ্রাম (১০% লাইফটাইম কমিশন)" : "Referral Program (10% Lifetime Bonus)"}
+            </h4>
+            <p className="text-xs text-slate-600 mt-0.5">
+              {lang === "bn"
+                ? "বন্ধুদের রেফার করে প্রতি রিচার্জে ১০% ক্যাশ বোনাস পান।"
+                : "Invite friends to recharge and earn 10% instant balance commission."}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => onNavigate("/referral")}
+          className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 cursor-pointer transition-all shadow-2xs active:scale-95"
+        >
+          {lang === "bn" ? "দেখুন" : "View Link"}
+        </button>
+      </div>
+
       {/* Need Help Bar */}
       <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl p-5 shadow-xs flex items-center justify-between gap-3">
         <div className="flex items-start gap-3">
