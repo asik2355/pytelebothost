@@ -19,12 +19,14 @@ import {
   Activity,
   CheckCircle2,
 } from "lucide-react";
-import { ActiveServer, AppNotification } from "../types";
+import { ActiveServer, AppNotification, AuthUser } from "../types";
 import { PurchasePlanModal, PlanToPurchase } from "./PurchasePlanModal";
+import { Lock, LogIn, UserPlus } from "lucide-react";
 
 interface MyServersPageViewProps {
   servers: ActiveServer[];
   lang: "bn" | "en";
+  currentUser?: AuthUser | null;
   onNavigate: (route: string) => void;
   onRefreshServers: () => void;
   onAddNotification?: (notif: AppNotification) => void;
@@ -40,6 +42,7 @@ type ViewMode = "cards" | "grid" | "compact";
 export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
   servers = [],
   lang,
+  currentUser,
   onNavigate,
   onRefreshServers,
   onAddNotification,
@@ -200,7 +203,44 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Search Input Bar */}
+      {/* Guest Lock Gate if not logged in */}
+      {!currentUser && (
+        <div className="p-8 bg-white border border-slate-200/90 rounded-2xl shadow-xs text-center max-w-lg mx-auto my-8 space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center mx-auto">
+            <Lock className="w-7 h-7" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">
+              {lang === "bn" ? "লগইন প্রয়োজন" : "Authentication Required"}
+            </h3>
+            <p className="text-sm text-slate-500 mt-1">
+              {lang === "bn"
+                ? "আপনার নিজস্ব সার্ভারগুলো দেখতে ও নতুন সার্ভার তৈরি করতে অনুগ্রহ করে প্রথমে সাইন ইন করুন।"
+                : "Please sign in or register to view and control your personal cloud servers."}
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => onNavigate("/login")}
+              className="px-5 py-2.5 bg-[#5438dc] hover:bg-[#472ecc] text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>{lang === "bn" ? "সাইন ইন করুন" : "Sign In"}</span>
+            </button>
+            <button
+              onClick={() => onNavigate("/registration")}
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>{lang === "bn" ? "রেজিস্ট্রেশন" : "Register"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {currentUser && (
+        <>
+          {/* 2. Search Input Bar */}
       <div className="relative">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
@@ -547,21 +587,23 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
         </div>
       )}
 
-      {/* Deploy Plan Modal */}
-      <PurchasePlanModal
-        isOpen={isDeployModalOpen}
-        onClose={() => setIsDeployModalOpen(false)}
-        plan={deployPlan}
-        lang={lang}
-        walletBalance={walletBalance}
-        onNavigate={onNavigate}
-        onServerCreated={(newSrv) => {
-          onServerCreated?.(newSrv);
-          onRefreshServers();
-        }}
-        onWalletUpdated={onWalletUpdated}
-        onAddNotification={onAddNotification}
-      />
+          {/* Deploy Plan Modal */}
+          <PurchasePlanModal
+            isOpen={isDeployModalOpen}
+            onClose={() => setIsDeployModalOpen(false)}
+            plan={deployPlan}
+            lang={lang}
+            walletBalance={walletBalance}
+            onNavigate={onNavigate}
+            onServerCreated={(newSrv) => {
+              onServerCreated?.(newSrv);
+              onRefreshServers();
+            }}
+            onWalletUpdated={onWalletUpdated}
+            onAddNotification={onAddNotification}
+          />
+        </>
+      )}
     </div>
   );
 };

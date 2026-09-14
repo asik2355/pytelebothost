@@ -25,8 +25,19 @@ import {
   PlusCircle,
   FileText,
   LogOut,
+  LayoutGrid,
+  Activity,
+  ShoppingCart,
+  Bot,
+  Ticket,
+  UserPlus,
+  Gift,
+  Settings,
+  ChevronRight,
+  Copy,
+  Check,
 } from "lucide-react";
-import { WorkspaceStatus, AppNotification } from "../types";
+import { WorkspaceStatus, AppNotification, AuthUser } from "../types";
 
 interface TopBannerProps {
   lang: "bn" | "en";
@@ -34,6 +45,8 @@ interface TopBannerProps {
   status: WorkspaceStatus | null;
   walletBalance?: number;
   currentRoute: string;
+  currentUser?: AuthUser | null;
+  onSignOut?: () => void;
   onNavigate: (route: string) => void;
   onStartBot: () => void;
   onStopBot: () => void;
@@ -49,6 +62,8 @@ export const TopBanner: React.FC<TopBannerProps> = ({
   status,
   walletBalance = 0.00,
   currentRoute,
+  currentUser,
+  onSignOut,
   onNavigate,
   onStartBot,
   onStopBot,
@@ -60,6 +75,11 @@ export const TopBanner: React.FC<TopBannerProps> = ({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState<
+    null | "help" | "affiliate" | "rewards" | "settings"
+  >(null);
+  const [copiedAffiliate, setCopiedAffiliate] = useState(false);
+  const [rewardClaimed, setRewardClaimed] = useState(false);
 
   const notificationsRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -368,10 +388,16 @@ export const TopBanner: React.FC<TopBannerProps> = ({
               id="banner-avatar-btn"
               type="button"
               onClick={() => setIsProfileOpen(!isProfileOpen)}
-              className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 hover:opacity-95 active:scale-95 flex items-center justify-center text-white shadow-2xs ring-1.5 ring-white transition-all"
-              title="User Profile & Wallet"
+              className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 hover:opacity-95 active:scale-95 flex items-center justify-center text-white shadow-2xs ring-1.5 ring-white transition-all cursor-pointer"
+              title={currentUser ? `${currentUser.name} (${currentUser.email})` : "Sign In / Account"}
             >
-              <User className="w-4 h-4 text-white" />
+              {currentUser?.name ? (
+                <span className="text-xs font-bold uppercase">
+                  {currentUser.name.charAt(0)}
+                </span>
+              ) : (
+                <User className="w-4 h-4 text-white" />
+              )}
             </button>
 
             {/* User Profile / Wallet Popover matching user screenshot */}
@@ -383,212 +409,562 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                   onClick={() => setIsProfileOpen(false)}
                 />
                 <div className="fixed left-3 right-3 top-[50px] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-[320px] sm:mt-2 bg-white border border-slate-200/90 rounded-2xl shadow-xl shadow-slate-900/10 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  {/* User Header */}
-                  <div className="pb-3 border-b border-slate-100">
-                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Alif Sheikh</h3>
-                    <p className="text-xs text-slate-500 mt-0.5 select-all font-sans">
-                      asikgamerbd@gmail.com
-                    </p>
-                  </div>
+                  {currentUser ? (
+                    <>
+                      {/* User Header */}
+                      <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
+                        <div className="min-w-0 pr-2">
+                          <h3 className="text-sm font-bold text-slate-900 leading-tight truncate">
+                            {currentUser.name}
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5 select-all font-sans truncate">
+                            {currentUser.email}
+                          </p>
+                          {currentUser.telegramUsername && (
+                            <span className="inline-block mt-1 text-[10px] font-medium text-sky-700 bg-sky-50 px-1.5 py-0.2 rounded border border-sky-100">
+                              {currentUser.telegramUsername}
+                            </span>
+                          )}
+                        </div>
+                        <div className="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 font-bold flex items-center justify-center text-sm shrink-0 uppercase border border-indigo-100">
+                          {currentUser.name.charAt(0)}
+                        </div>
+                      </div>
 
-                  {/* Balance Gray Card - Single Line */}
-                  <div className="my-3 px-3.5 py-2.5 rounded-xl bg-slate-50/90 border border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Balance
-                    </span>
-                    <span className="text-base font-extrabold text-slate-900 font-sans tracking-tight">
-                      ৳{walletBalance.toFixed(2)}
-                    </span>
-                  </div>
+                      {/* Balance Gray Card - Single Line */}
+                      <div className="my-3 px-3.5 py-2.5 rounded-xl bg-slate-50/90 border border-slate-100 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          Balance
+                        </span>
+                        <span className="text-base font-extrabold text-slate-900 font-sans tracking-tight">
+                          ৳{walletBalance.toFixed(2)}
+                        </span>
+                      </div>
 
-                  {/* Actions List */}
-                  <div className="space-y-0.5">
-                    <button
-                      onClick={() => {
-                        setIsProfileOpen(false);
-                        onNavigate("/billing");
-                      }}
-                      className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
-                    >
-                      <PlusCircle className="w-4 h-4 text-slate-500 stroke-[1.8]" />
-                      <span>Add Funds</span>
-                    </button>
+                      {/* Actions List */}
+                      <div className="space-y-0.5">
+                        <button
+                          onClick={() => {
+                            setIsProfileOpen(false);
+                            onNavigate("/billing");
+                          }}
+                          className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
+                        >
+                          <PlusCircle className="w-4 h-4 text-slate-500 stroke-[1.8]" />
+                          <span>Add Funds</span>
+                        </button>
 
-                    <button
-                      onClick={() => {
-                        setIsProfileOpen(false);
-                        onNavigate("/billing");
-                      }}
-                      className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
-                    >
-                      <FileText className="w-4 h-4 text-slate-500 stroke-[1.8]" />
-                      <span>Invoices</span>
-                    </button>
-                  </div>
+                        <button
+                          onClick={() => {
+                            setIsProfileOpen(false);
+                            onNavigate("/billing");
+                          }}
+                          className="w-full text-left py-2 px-1.5 rounded-lg text-slate-800 hover:bg-slate-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
+                        >
+                          <FileText className="w-4 h-4 text-slate-500 stroke-[1.8]" />
+                          <span>Invoices</span>
+                        </button>
+                      </div>
 
-                  {/* Sign Out Row */}
-                  <div className="border-t border-slate-100 mt-2 pt-2">
-                    <button
-                      onClick={() => {
-                        setIsProfileOpen(false);
-                      }}
-                      className="w-full text-left py-1.5 px-1.5 rounded-lg text-rose-500 hover:bg-rose-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
-                    >
-                      <LogOut className="w-4 h-4 text-rose-500 stroke-[1.8]" />
-                      <span>Sign Out</span>
-                    </button>
-                  </div>
+                      {/* Sign Out Row */}
+                      <div className="border-t border-slate-100 mt-2 pt-2">
+                        <button
+                          onClick={() => {
+                            setIsProfileOpen(false);
+                            if (onSignOut) {
+                              onSignOut();
+                            } else {
+                              onNavigate("/login");
+                            }
+                          }}
+                          className="w-full text-left py-1.5 px-1.5 rounded-lg text-rose-500 hover:bg-rose-50 active:scale-[0.99] transition-colors flex items-center gap-2.5 text-xs font-medium cursor-pointer"
+                        >
+                          <LogOut className="w-4 h-4 text-rose-500 stroke-[1.8]" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    /* Guest View */
+                    <div className="space-y-3 py-1">
+                      <div className="text-center pb-2 border-b border-slate-100">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center mx-auto mb-2">
+                          <User className="w-5 h-5" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-900">
+                          {lang === "bn" ? "লগইন করা নেই" : "Not Signed In"}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {lang === "bn"
+                            ? "সার্ভার ও ওয়ালেট ম্যানেজ করতে লগইন করুন"
+                            : "Sign in to manage your servers & wallet"}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          onNavigate("/login");
+                        }}
+                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                      >
+                        <User className="w-3.5 h-3.5" />
+                        <span>{lang === "bn" ? "লগইন করুন (/login)" : "Sign In (/login)"}</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          onNavigate("/registration");
+                        }}
+                        className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>{lang === "bn" ? "নতুন একাউন্ট (/registration)" : "Register (/registration)"}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             )}
           </div>
 
           {/* 4. Hamburger Menu Icon */}
-          <div className="relative" ref={menuRef}>
+          <div className="relative">
             <button
               id="banner-menu-btn"
               type="button"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="w-8 h-8 rounded-xl hover:bg-slate-100 active:scale-95 flex items-center justify-center text-slate-700 transition-colors"
-              title="Quick Menu"
+              onClick={() => setIsMenuOpen(true)}
+              className="w-8 h-8 rounded-xl hover:bg-slate-100 active:scale-95 flex items-center justify-center text-slate-700 transition-colors cursor-pointer"
+              title="Services Menu"
             >
-              {isMenuOpen ? <X className="w-4.5 h-4.5" /> : <Menu className="w-5 h-5" />}
+              <Menu className="w-5 h-5" />
             </button>
 
-            {/* Quick Slide-down Menu */}
+            {/* Full Left Slide-in Drawer matching user screenshot */}
             {isMenuOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
-                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2.5 py-1 mb-1">
-                  Navigation
-                </div>
+              <>
+                {/* Backdrop */}
+                <div
+                  className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 animate-in fade-in duration-200"
+                  onClick={() => setIsMenuOpen(false)}
+                />
 
-                <div className="space-y-1 text-xs">
-                  <button
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      onNavigate("/home");
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-semibold transition-colors ${
-                      currentRoute === "/home"
-                        ? "bg-sky-50 text-sky-700"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <Home className="w-4 h-4" />
-                    <span>HOME</span>
-                  </button>
+                {/* Left Drawer Container */}
+                <div
+                  ref={menuRef}
+                  className="fixed top-0 left-0 bottom-0 w-[285px] max-w-[85vw] bg-white z-50 shadow-2xl flex flex-col animate-in slide-in-from-left duration-200"
+                >
+                  {/* Brand Header */}
+                  <div className="p-4 sm:p-5 flex items-center justify-between border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                      {/* Stylized rounded gradient icon */}
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-600 p-0.5 shadow-sm flex items-center justify-center shrink-0">
+                        <div className="w-full h-full bg-white/95 rounded-[10px] flex items-center justify-center">
+                          <Bot className="w-5 h-5 text-indigo-600" />
+                        </div>
+                      </div>
+                      <div>
+                        <span className="font-extrabold text-slate-900 text-base tracking-tight font-sans block">
+                          bot-host.xyz
+                        </span>
+                      </div>
+                    </div>
 
-                  <button
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      onNavigate("/services");
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-semibold transition-colors ${
-                      currentRoute === "/services"
-                        ? "bg-sky-50 text-sky-700"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <Server className="w-4 h-4" />
-                    <span>SERVICE</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      onNavigate("/billing");
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-semibold transition-colors ${
-                      currentRoute === "/billing"
-                        ? "bg-sky-50 text-sky-700"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>BALANCE</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      onNavigate("/bot-store");
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-semibold transition-colors ${
-                      currentRoute === "/bot-store"
-                        ? "bg-sky-50 text-sky-700"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>BOT STORE</span>
-                  </button>
-                </div>
-
-                {/* Quick Bot Actions in Menu */}
-                <div className="mt-3 pt-3 border-t border-slate-100">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2.5 mb-1.5">
-                    Bot Controller
+                    <button
+                      onClick={() => setIsMenuOpen(false)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                      title="Close"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {isRunning ? (
+
+                  {/* Drawer Menu Body */}
+                  <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+                    <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase px-3 py-1.5">
+                      SERVICES
+                    </div>
+
+                    {/* 1. Console Hub */}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        onNavigate("/home");
+                      }}
+                      className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        currentRoute === "/home"
+                          ? "bg-[#f2effe] text-[#5a36db] font-semibold relative before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:bg-[#5a36db] before:rounded-r"
+                          : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <LayoutGrid
+                        className={`w-5 h-5 ${
+                          currentRoute === "/home" ? "text-[#6342db]" : "text-slate-600"
+                        }`}
+                      />
+                      <span>Console Hub</span>
+                    </button>
+
+                    {/* 2. My Server */}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        onNavigate("/my-servers");
+                      }}
+                      className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        currentRoute === "/my-servers"
+                          ? "bg-[#f2effe] text-[#5a36db] font-semibold relative before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:bg-[#5a36db] before:rounded-r"
+                          : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <Server
+                        className={`w-5 h-5 ${
+                          currentRoute === "/my-servers" ? "text-[#6342db]" : "text-slate-600"
+                        }`}
+                      />
+                      <span>My Server</span>
+                    </button>
+
+                    {/* 3. Hosting Plans (Active state highlighted matching screenshot) */}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        onNavigate("/services");
+                      }}
+                      className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        currentRoute === "/services"
+                          ? "bg-[#f2effe] text-[#5a36db] font-semibold relative before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:bg-[#5a36db] before:rounded-r"
+                          : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <ShoppingCart
+                        className={`w-5 h-5 ${
+                          currentRoute === "/services" ? "text-[#6342db]" : "text-slate-600"
+                        }`}
+                      />
+                      <span>Hosting Plans</span>
+                    </button>
+
+                    {/* 4. Bot Code Store */}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        onNavigate("/bot-store");
+                      }}
+                      className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        currentRoute === "/bot-store"
+                          ? "bg-[#f2effe] text-[#5a36db] font-semibold relative before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:bg-[#5a36db] before:rounded-r"
+                          : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <Bot
+                        className={`w-5 h-5 ${
+                          currentRoute === "/bot-store" ? "text-[#6342db]" : "text-slate-600"
+                        }`}
+                      />
+                      <span>Bot Code Store</span>
+                    </button>
+
+                    {/* 5. Help Center */}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setActiveModal("help");
+                      }}
+                      className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
+                    >
+                      <Ticket className="w-5 h-5 text-slate-600" />
+                      <span>Help Center</span>
+                    </button>
+
+                    {/* 6. Affiliate Program */}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setActiveModal("affiliate");
+                      }}
+                      className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
+                    >
+                      <UserPlus className="w-5 h-5 text-slate-600" />
+                      <span>Affiliate Program</span>
+                    </button>
+
+                    {/* 7. Claim Rewards */}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setActiveModal("rewards");
+                      }}
+                      className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
+                    >
+                      <Gift className="w-5 h-5 text-slate-600" />
+                      <span>Claim Rewards</span>
+                    </button>
+
+                    {/* 8. Account Settings / Login */}
+                    {currentUser ? (
                       <button
                         onClick={() => {
                           setIsMenuOpen(false);
-                          onStopBot();
+                          setActiveModal("settings");
                         }}
-                        className="flex items-center justify-center gap-1.5 py-2 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition-all"
+                        className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
                       >
-                        <Square className="w-3.5 h-3.5 fill-current" />
-                        <span>Stop</span>
+                        <Settings className="w-5 h-5 text-slate-600" />
+                        <span>Account Settings ({currentUser.name})</span>
                       </button>
                     ) : (
                       <button
                         onClick={() => {
                           setIsMenuOpen(false);
-                          onStartBot();
+                          onNavigate("/login");
                         }}
-                        className="flex items-center justify-center gap-1.5 py-2 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg transition-all"
+                        className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-indigo-600 hover:bg-indigo-50/70 transition-all cursor-pointer"
                       >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>Run</span>
+                        <User className="w-5 h-5 text-indigo-600" />
+                        <span>Sign In / Register</span>
                       </button>
                     )}
+                  </div>
+
+                  {/* Footer in Drawer */}
+                  <div className="p-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between">
                     <button
                       onClick={() => {
-                        setIsMenuOpen(false);
-                        onRestartBot();
+                        setLang(lang === "bn" ? "en" : "bn");
                       }}
-                      className="flex items-center justify-center gap-1.5 py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all"
+                      className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
                     >
-                      <RotateCw className="w-3.5 h-3.5" />
-                      <span>Restart</span>
+                      <Globe className="w-4 h-4 text-slate-400" />
+                      <span>{lang === "bn" ? "Switch to English" : "বাংলায় পরিবর্তন"}</span>
                     </button>
+                    <span className="text-[11px] text-slate-400 font-mono font-medium">v2.5.0</span>
                   </div>
                 </div>
-
-                {/* Language Switch */}
-                <div className="mt-2 pt-2 border-t border-slate-100">
-                  <button
-                    onClick={() => {
-                      setLang(lang === "bn" ? "en" : "bn");
-                      setIsMenuOpen(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 rounded-lg"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-slate-400" />
-                      <span>{lang === "bn" ? "ভাষা পরিবর্তন" : "Switch Language"}</span>
-                    </span>
-                    <span className="font-bold text-sky-600">
-                      {lang === "bn" ? "English" : "বাংলা"}
-                    </span>
-                  </button>
-                </div>
-              </div>
+              </>
             )}
           </div>
         </div>
       </div>
+
+      {/* Interactive Modals for Menu Items */}
+      {activeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-100 animate-in zoom-in-95">
+            {/* Modal: Help Center */}
+            {activeModal === "help" && (
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                      <Ticket className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base">Help Center & Support</h3>
+                      <p className="text-xs text-slate-400">24/7 Live Support Support Team</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveModal(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-800 block">Telegram Support</span>
+                      <span className="text-slate-500 text-[11px]">@BotHostSupportBD</span>
+                    </div>
+                    <a
+                      href="https://t.me"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-1.5 rounded-lg bg-sky-500 text-white font-semibold text-[11px]"
+                    >
+                      Join
+                    </a>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-800 block">Email Support</span>
+                      <span className="text-slate-500 text-[11px]">support@bot-host.xyz</span>
+                    </div>
+                    <span className="text-slate-400 text-[11px]">Active</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveModal(null)}
+                  className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+
+            {/* Modal: Affiliate Program */}
+            {activeModal === "affiliate" && (
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                      <UserPlus className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base">Affiliate Program</h3>
+                      <p className="text-xs text-slate-400">Earn 10% Lifetime Commission</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveModal(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Share your referral link with friends. Whenever they recharge or buy a hosting plan, you get 10% cash bonus added to your balance.
+                </p>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">Your Referral Link</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value="https://bot-host.xyz/?ref=asikgamer"
+                      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-mono select-all"
+                    />
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText("https://bot-host.xyz/?ref=asikgamer");
+                        setCopiedAffiliate(true);
+                        setTimeout(() => setCopiedAffiliate(false), 2000);
+                      }}
+                      className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {copiedAffiliate ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      <span>{copiedAffiliate ? "Copied" : "Copy"}</span>
+                    </button>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveModal(null)}
+                  className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+
+            {/* Modal: Claim Rewards */}
+            {activeModal === "rewards" && (
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                      <Gift className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base">Claim Daily Rewards</h3>
+                      <p className="text-xs text-slate-400">Daily Login & Activity Bonuses</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveModal(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-tr from-amber-50 to-orange-50 border border-amber-200/80 text-center space-y-2">
+                  <span className="text-2xl">🎁</span>
+                  <h4 className="font-bold text-amber-950 text-sm">Daily Hosting Bonus</h4>
+                  <p className="text-xs text-amber-800">
+                    Claim your daily ৳5.00 server hosting credit every 24 hours!
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setRewardClaimed(true);
+                  }}
+                  disabled={rewardClaimed}
+                  className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                    rewardClaimed
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white cursor-pointer shadow-md"
+                  }`}
+                >
+                  <Gift className="w-4 h-4" />
+                  <span>{rewardClaimed ? "Reward Claimed Today (৳5.00)" : "Claim ৳5.00 Bonus Now"}</span>
+                </button>
+                <button
+                  onClick={() => setActiveModal(null)}
+                  className="w-full py-2 rounded-xl text-slate-500 hover:text-slate-700 text-xs font-semibold"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+
+            {/* Modal: Account Settings */}
+            {activeModal === "settings" && (
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                      <Settings className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base">Account Settings</h3>
+                      <p className="text-xs text-slate-400">Manage Profile & Security</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveModal(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="text-slate-500 font-semibold block mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      defaultValue={currentUser?.name || "Alif Sheikh"}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-500 font-semibold block mb-1">Email Address</label>
+                    <input
+                      type="text"
+                      defaultValue={currentUser?.email || "asikgamerbd@gmail.com"}
+                      disabled
+                      className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-medium cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-500 font-semibold block mb-1">Currency</label>
+                    <select className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium">
+                      <option value="BDT">BDT (৳) - Bangladeshi Taka</option>
+                      <option value="USD">USD ($) - US Dollar</option>
+                    </select>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveModal(null)}
+                  className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs"
+                >
+                  Save Changes
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 };

@@ -25,14 +25,17 @@ import {
   Layers,
   Sparkle,
   Trash2,
+  LogIn,
+  UserPlus,
 } from "lucide-react";
-import { WorkspaceStatus, TelegramBotProfile, AppNotification, ActiveServer } from "../types";
+import { WorkspaceStatus, TelegramBotProfile, AppNotification, ActiveServer, AuthUser } from "../types";
 import { PurchasePlanModal, PlanToPurchase } from "./PurchasePlanModal";
 
 interface HomePageViewProps {
   status: WorkspaceStatus | null;
   botProfile: TelegramBotProfile | null;
   lang: "bn" | "en";
+  currentUser?: AuthUser | null;
   onNavigate: (route: string) => void;
   onStartBot: () => void;
   onStopBot: () => void;
@@ -52,6 +55,7 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
   status,
   botProfile,
   lang,
+  currentUser,
   onNavigate,
   onStartBot,
   onStopBot,
@@ -92,6 +96,16 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
 
   // Handle password generation
   const handleGenPassword = () => {
+    if (!currentUser) {
+      alert(
+        lang === "bn"
+          ? "প্যানেল পাসওয়ার্ড তৈরি করতে অনুগ্রহ করে আগে লগইন বা সাইন আপ করুন।"
+          : "Please sign in or create an account to generate panel passwords."
+      );
+      onNavigate("/login");
+      return;
+    }
+
     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
     let pwd = "";
     for (let i = 0; i < 14; i++) {
@@ -117,6 +131,16 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
 
   // Handle Claim Daily Reward
   const handleClaimDailyReward = () => {
+    if (!currentUser) {
+      alert(
+        lang === "bn"
+          ? "ডেইলি বোনাস গ্রহণ করতে অনুগ্রহ করে আগে লগইন বা একাউন্ট তৈরি করুন।"
+          : "Please sign in or register to claim your daily rewards."
+      );
+      onNavigate("/login");
+      return;
+    }
+
     if (claimedDaily) return;
     const bonus = 25.0;
     const newBal = walletBalance + bonus;
@@ -215,6 +239,43 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
         </div>
       </div>
 
+      {/* Guest Mode Notice Banner */}
+      {!currentUser && (
+        <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+              <Lock className="w-4.5 h-4.5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                {lang === "bn" ? "গেস্ট প্রিভিউ মোডে আছেন" : "You are in Guest Preview Mode"}
+              </h4>
+              <p className="text-[11px] sm:text-xs text-slate-500">
+                {lang === "bn"
+                  ? "টাকা অ্যাড করতে, সার্ভার কিনতে ও নিজের বট রান করতে অ্যাকাউন্ট লগইন করুন।"
+                  : "Sign in or register to recharge wallet, deploy servers and host your custom Telegram bots."}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <button
+              onClick={() => onNavigate("/login")}
+              className="flex-1 sm:flex-initial px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>{lang === "bn" ? "সাইন ইন" : "Sign In"}</span>
+            </button>
+            <button
+              onClick={() => onNavigate("/registration")}
+              className="flex-1 sm:flex-initial px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>{lang === "bn" ? "রেজিস্ট্রেশন" : "Register"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 2. Top Action Cards matching Screenshot 1 */}
       <div className="space-y-3.5">
         {/* Card 1: Bot Store */}
@@ -293,8 +354,8 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
               EMAIL
             </span>
-            <div className="text-sm font-semibold text-slate-900 font-mono select-all truncate">
-              asikgamerbd@gmail.com
+            <div className={`text-sm font-semibold font-mono select-all truncate ${currentUser ? "text-slate-900" : "text-amber-700 italic"}`}>
+              {currentUser ? currentUser.email : (lang === "bn" ? "লগইন করা নেই (গেস্ট মোড)" : "Guest Mode (Sign in required)")}
             </div>
           </div>
 

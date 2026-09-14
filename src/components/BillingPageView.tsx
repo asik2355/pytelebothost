@@ -15,10 +15,12 @@ import {
   Check,
 } from "lucide-react";
 
-import { AppNotification } from "../types";
+import { AppNotification, AuthUser } from "../types";
+import { Lock, LogIn, UserPlus } from "lucide-react";
 
 interface BillingPageViewProps {
   lang: "bn" | "en";
+  currentUser?: AuthUser | null;
   onNavigate: (route: string) => void;
   onWalletUpdated?: (newBalance: number) => void;
   onAddNotification?: (notif: AppNotification) => void;
@@ -40,6 +42,7 @@ interface WalletInfo {
 
 export const BillingPageView: React.FC<BillingPageViewProps> = ({
   lang,
+  currentUser,
   onNavigate,
   onWalletUpdated,
   onAddNotification,
@@ -92,6 +95,16 @@ export const BillingPageView: React.FC<BillingPageViewProps> = ({
   };
 
   const handleProceedPayment = async () => {
+    if (!currentUser) {
+      alert(
+        lang === "bn"
+          ? "টাকা যোগ করতে অনুগ্রহ করে আগে লগইন বা একাউন্ট তৈরি করুন।"
+          : "Please sign in or create an account to add funds to your wallet."
+      );
+      onNavigate("/login");
+      return;
+    }
+
     if (rechargeAmount <= 0) {
       alert(lang === "bn" ? "অনুগ্রহ করে রিচার্জের পরিমাণ নির্ধারণ করুন!" : "Please enter a valid recharge amount greater than 0");
       return;
@@ -158,6 +171,43 @@ export const BillingPageView: React.FC<BillingPageViewProps> = ({
             : "Recharge your wallet to enjoy uninterrupted services."}
         </p>
       </div>
+
+      {/* Guest Warning / Login Gate Banner if not logged in */}
+      {!currentUser && (
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-amber-900">
+                {lang === "bn" ? "লগইন প্রয়োজন (Login Required)" : "Authentication Required"}
+              </h4>
+              <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+                {lang === "bn"
+                  ? "টাকা অ্যাড করতে বা ওয়ালেট ব্যবহার করতে আপনার অ্যাকাউন্টে লগইন বা রেজিস্ট্রেশন করুন।"
+                  : "Please sign in or create an account to recharge balance and access your personal wallet."}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <button
+              onClick={() => onNavigate("/login")}
+              className="flex-1 sm:flex-initial px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>{lang === "bn" ? "লগইন" : "Sign In"}</span>
+            </button>
+            <button
+              onClick={() => onNavigate("/registration")}
+              className="flex-1 sm:flex-initial px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>{lang === "bn" ? "রেজিস্টার" : "Register"}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Payment Success Alert */}
       {paymentSuccessMsg && (

@@ -12,8 +12,11 @@ import {
   Zap,
 } from "lucide-react";
 
+import { AuthUser } from "../types";
+
 interface BotStorePageViewProps {
   lang: "bn" | "en";
+  currentUser?: AuthUser | null;
   onLoadTemplate: (templateId: string) => Promise<void>;
   onNavigate: (route: string) => void;
   isLoading: boolean;
@@ -21,6 +24,7 @@ interface BotStorePageViewProps {
 
 export const BotStorePageView: React.FC<BotStorePageViewProps> = ({
   lang,
+  currentUser,
   onLoadTemplate,
   onNavigate,
   isLoading,
@@ -133,6 +137,16 @@ export const BotStorePageView: React.FC<BotStorePageViewProps> = ({
       : templates.filter((t) => t.category === activeFilter);
 
   const handleDeploy = async (templateId: string) => {
+    if (!currentUser) {
+      alert(
+        lang === "bn"
+          ? "বট কোড ইনস্টল ও রান করতে অনুগ্রহ করে আগে লগইন বা একাউন্ট তৈরি করুন।"
+          : "Please sign in or create an account to install and deploy bots."
+      );
+      onNavigate("/login");
+      return;
+    }
+
     setDeployedId(templateId);
     // Standard template IDs handled by backend
     const targetId =
@@ -158,7 +172,7 @@ export const BotStorePageView: React.FC<BotStorePageViewProps> = ({
               <span>{lang === "bn" ? "রেডিমেড বট লাইব্রেরি" : "Ready-to-Deploy Bots"}</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
-              {lang === "bn" ? "বট স্টোর (Telegram Bot Store)" : "Telegram Bot Store"}
+              {lang === "bn" ? "বট কোড স্টোর (Bot Code Store)" : "Bot Code Store"}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
               {lang === "bn"

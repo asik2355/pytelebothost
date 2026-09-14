@@ -76,3 +76,13 @@ export interface ActiveServer {
   envVars?: Array<{ key: string; value: string }>;
 }
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  telegramUsername?: string;
+  avatarUrl?: string;
+  createdAt?: string;
+  role?: string;
+}
+

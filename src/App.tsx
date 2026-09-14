@@ -8,7 +8,8 @@ import { BotStorePageView } from "./components/BotStorePageView";
 import { MyServersPageView } from "./components/MyServersPageView";
 import { ServerDetailView } from "./components/ServerDetailView";
 import { ServerControlPanelView } from "./components/ServerControlPanelView";
-import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification, ActiveServer } from "./types";
+import { AuthPageView } from "./components/AuthPageView";
+import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification, ActiveServer, AuthUser } from "./types";
 
 export default function App() {
   const [lang, setLang] = useState<"bn" | "en">("en");
@@ -21,6 +22,17 @@ export default function App() {
   const [servers, setServers] = useState<ActiveServer[]>([]);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
   const [isViewingControlPanel, setIsViewingControlPanel] = useState<boolean>(false);
+
+  // Authenticated user state
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem("hostbot_auth_user");
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return null; // Guest / Unauthenticated by default
+  });
 
   // Persistent user notifications for plan changes, money top-ups, system events
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -35,8 +47,8 @@ export default function App() {
     return [
       {
         id: "notif-init-1",
-        title: "Welcome to Host Bot",
-        titleBn: "Host Bot এ স্বাগতম",
+        title: "Welcome to bot-host.xyz",
+        titleBn: "bot-host.xyz এ স্বাগতম",
         desc: "Python 3.10 cloud bot hosting sandbox is active.",
         descBn: "আপনার ক্লাউড বট হোস্টিং স্যান্ডবক্স প্রস্তুত আছে।",
         timestamp: new Date().toISOString(),
@@ -67,13 +79,15 @@ export default function App() {
     setNotifications([]);
   }, []);
 
-  // Router state: HOME, SERVICES, BILLING, BOT STORE, MY SERVERS
+  // Router state: HOME, SERVICES, BILLING, BOT STORE, MY SERVERS, LOGIN, REGISTRATION
   const [currentRoute, setCurrentRoute] = useState<NavRoute>(() => {
     const path = window.location.pathname;
     if (path === "/services" || path === "/service") return "/services";
     if (path === "/billing") return "/billing";
     if (path === "/bot-store") return "/bot-store";
     if (path === "/my-servers") return "/my-servers";
+    if (path === "/login") return "/login";
+    if (path === "/registration" || path === "/register") return "/registration";
     return "/home";
   });
 
@@ -84,6 +98,8 @@ export default function App() {
     else if (route === "/billing") normalized = "/billing";
     else if (route === "/bot-store") normalized = "/bot-store";
     else if (route === "/my-servers") normalized = "/my-servers";
+    else if (route === "/login") normalized = "/login";
+    else if (route === "/registration" || route === "/register") normalized = "/registration";
     else normalized = "/home";
 
     setSelectedServerId(null);
@@ -108,12 +124,54 @@ export default function App() {
       else if (path === "/billing") setCurrentRoute("/billing");
       else if (path === "/bot-store") setCurrentRoute("/bot-store");
       else if (path === "/my-servers") setCurrentRoute("/my-servers");
+      else if (path === "/login") setCurrentRoute("/login");
+      else if (path === "/registration" || path === "/register") setCurrentRoute("/registration");
       else setCurrentRoute("/home");
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  const handleAuthSuccess = useCallback((user: AuthUser) => {
+    setCurrentUser(user);
+    try {
+      localStorage.setItem("hostbot_auth_user", JSON.stringify(user));
+    } catch {
+      // ignore
+    }
+    handleAddNotification({
+      id: "auth_" + Date.now(),
+      title: "Logged In Successfully",
+      titleBn: "লগইন সফল হয়েছে",
+      desc: `Welcome back, ${user.name}!`,
+      descBn: `স্বাগতম ${user.name}! আপনার ড্যাশবোর্ড প্রস্তুত।`,
+      timestamp: new Date().toISOString(),
+      type: "system",
+      read: false,
+      link: "/home",
+    });
+  }, [handleAddNotification]);
+
+  const handleSignOut = useCallback(() => {
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem("hostbot_auth_user");
+    } catch {
+      // ignore
+    }
+    handleAddNotification({
+      id: "signout_" + Date.now(),
+      title: "Signed Out",
+      titleBn: "সাইন আউট সম্পন্ন",
+      desc: "You have been signed out from your account.",
+      descBn: "আপনি সফলভাবে সাইন আউট হয়েছেন।",
+      timestamp: new Date().toISOString(),
+      type: "system",
+      read: false,
+    });
+    navigateTo("/login");
+  }, [handleAddNotification, navigateTo]);
 
   // Fetch Workspace Info & Token
   const fetchWallet = useCallback(async () => {
@@ -299,6 +357,16 @@ export default function App() {
 
   // Actions
   const handleStartBot = async () => {
+    if (!currentUser) {
+      alert(
+        lang === "bn"
+          ? "বট রান করতে অনুগ্রহ করে আগে সাইন ইন বা অ্যাকাউন্ট তৈরি করুন।"
+          : "Please sign in or create an account to start your Telegram bot."
+      );
+      navigateTo("/login");
+      return;
+    }
+
     if (!token && !status?.hasToken) {
       alert(
         lang === "bn"
@@ -334,6 +402,16 @@ export default function App() {
   };
 
   const handleStopBot = async () => {
+    if (!currentUser) {
+      alert(
+        lang === "bn"
+          ? "বট কন্ট্রোল করতে অনুগ্রহ করে আগে লগইন করুন।"
+          : "Please sign in to manage bots."
+      );
+      navigateTo("/login");
+      return;
+    }
+
     setIsActionLoading(true);
     try {
       const res = await fetch("/api/bot/stop", { method: "POST" });
@@ -357,6 +435,16 @@ export default function App() {
   };
 
   const handleRestartBot = async () => {
+    if (!currentUser) {
+      alert(
+        lang === "bn"
+          ? "বট রিস্টার্ট করতে অনুগ্রহ করে আগে লগইন করুন।"
+          : "Please sign in to restart bots."
+      );
+      navigateTo("/login");
+      return;
+    }
+
     setIsActionLoading(true);
     try {
       await fetch("/api/bot/restart", { method: "POST" });
@@ -494,13 +582,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
-      {/* Permanent Top Banner (Host Bot) */}
+      {/* Permanent Top Banner (bot-host.xyz) */}
       <TopBanner
         lang={lang}
         setLang={setLang}
         status={status}
         walletBalance={walletBalance}
         currentRoute={currentRoute}
+        currentUser={currentUser}
+        onSignOut={handleSignOut}
         onNavigate={navigateTo}
         onStartBot={handleStartBot}
         onStopBot={handleStopBot}
@@ -552,6 +642,7 @@ export default function App() {
                 status={status}
                 botProfile={botProfile}
                 lang={lang}
+                currentUser={currentUser}
                 onNavigate={navigateTo}
                 onStartBot={handleStartBot}
                 onStopBot={handleStopBot}
@@ -573,6 +664,7 @@ export default function App() {
               <ServicesPageView
                 lang={lang}
                 status={status}
+                currentUser={currentUser}
                 walletBalance={walletBalance}
                 onNavigate={navigateTo}
                 onWalletUpdated={(bal) => setWalletBalance(bal)}
@@ -585,6 +677,7 @@ export default function App() {
             {currentRoute === "/billing" && (
               <BillingPageView
                 lang={lang}
+                currentUser={currentUser}
                 onNavigate={navigateTo}
                 onWalletUpdated={(balance) => setWalletBalance(balance)}
                 onAddNotification={handleAddNotification}
@@ -595,6 +688,7 @@ export default function App() {
             {currentRoute === "/bot-store" && (
               <BotStorePageView
                 lang={lang}
+                currentUser={currentUser}
                 onLoadTemplate={handleLoadTemplate}
                 onNavigate={navigateTo}
                 isLoading={isActionLoading}
@@ -606,6 +700,7 @@ export default function App() {
               <MyServersPageView
                 servers={servers}
                 lang={lang}
+                currentUser={currentUser}
                 onNavigate={navigateTo}
                 onRefreshServers={fetchServers}
                 onAddNotification={handleAddNotification}
@@ -615,19 +710,41 @@ export default function App() {
                 onSelectServerForManage={handleSelectServerForManage}
               />
             )}
+
+            {/* Route 6: LOGIN (/login) */}
+            {currentRoute === "/login" && (
+              <AuthPageView
+                initialMode="login"
+                lang={lang}
+                onAuthSuccess={handleAuthSuccess}
+                onNavigate={navigateTo}
+              />
+            )}
+
+            {/* Route 7: REGISTRATION (/registration) */}
+            {currentRoute === "/registration" && (
+              <AuthPageView
+                initialMode="registration"
+                lang={lang}
+                onAuthSuccess={handleAuthSuccess}
+                onNavigate={navigateTo}
+              />
+            )}
           </>
         )}
       </main>
 
-      {/* Persistent Bottom Navigation Bar in English (HOME, SERVICE, BILLING, BOT STORE) */}
-      <BottomNav
-        currentRoute={currentRoute}
-        onRouteChange={navigateTo}
-        isBotRunning={isRunning}
-      />
+      {/* Persistent Bottom Navigation Bar in English (HOME, SERVICE, BILLING, BOT STORE) - Hidden on Login & Registration */}
+      {currentRoute !== "/login" && currentRoute !== "/registration" && (
+        <BottomNav
+          currentRoute={currentRoute}
+          onRouteChange={navigateTo}
+          isBotRunning={isRunning}
+        />
+      )}
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-3 px-4 text-center text-xs text-slate-500 mb-16">
+      <footer className={`border-t border-slate-200 bg-white py-3 px-4 text-center text-xs text-slate-500 ${currentRoute !== "/login" && currentRoute !== "/registration" ? "mb-16" : "mb-0"}`}>
         <p>
           {lang === "bn"
             ? "Telegram Bot Runner • Python ৩.১০ ক্লাউড রানার • টেলিগ্রাম বট হোস্ট এবং রান করুন"

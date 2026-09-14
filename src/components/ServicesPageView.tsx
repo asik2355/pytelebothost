@@ -15,12 +15,13 @@ import {
   CreditCard,
   Layers,
 } from "lucide-react";
-import { WorkspaceStatus, AppNotification, ActiveServer } from "../types";
+import { WorkspaceStatus, AppNotification, ActiveServer, AuthUser } from "../types";
 import { PurchasePlanModal, PlanToPurchase } from "./PurchasePlanModal";
 
 interface ServicesPageViewProps {
   lang: "bn" | "en";
   status: WorkspaceStatus | null;
+  currentUser?: AuthUser | null;
   walletBalance?: number;
   onNavigate: (route: string) => void;
   onWalletUpdated?: (newBalance: number) => void;
@@ -31,6 +32,7 @@ interface ServicesPageViewProps {
 export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
   lang,
   status,
+  currentUser,
   walletBalance = 117.5,
   onNavigate,
   onWalletUpdated,
@@ -141,6 +143,17 @@ export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
 
   const handleSelectPlan = (planId: string) => {
     if (planId === "free") return;
+
+    if (!currentUser) {
+      alert(
+        lang === "bn"
+          ? "সার্ভার প্ল্যান ক্রয় ও সক্রিয় করতে অনুগ্রহ করে আগে সাইন ইন বা অ্যাকাউন্ট তৈরি করুন।"
+          : "Please sign in or create an account to purchase and deploy hosting plans."
+      );
+      onNavigate("/login");
+      return;
+    }
+
     const targetPlan = hostingPlans.find((p) => p.id === planId);
     if (!targetPlan) return;
 

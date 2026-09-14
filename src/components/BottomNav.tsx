@@ -1,7 +1,14 @@
 import React from "react";
 import { Home, Server, CreditCard, ShoppingBag } from "lucide-react";
 
-export type NavRoute = "/home" | "/services" | "/billing" | "/bot-store" | "/my-servers";
+export type NavRoute =
+  | "/home"
+  | "/services"
+  | "/billing"
+  | "/bot-store"
+  | "/my-servers"
+  | "/login"
+  | "/registration";
 
 interface BottomNavProps {
   currentRoute: NavRoute;
@@ -38,7 +45,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     },
     {
       route: "/bot-store",
-      name: "BOT STORE",
+      name: "Bot Code Store",
       icon: ShoppingBag,
     },
   ];
