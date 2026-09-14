@@ -17,7 +17,7 @@ export default function App() {
   const [token, setToken] = useState<string>("");
   const [botProfile, setBotProfile] = useState<TelegramBotProfile | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [walletBalance, setWalletBalance] = useState<number>(117.50);
+  const [walletBalance, setWalletBalance] = useState<number>(0.00);
   const [servers, setServers] = useState<ActiveServer[]>([]);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
   const [isViewingControlPanel, setIsViewingControlPanel] = useState<boolean>(false);
@@ -37,9 +37,9 @@ export default function App() {
         id: "notif-init-1",
         title: "Welcome to Host Bot",
         titleBn: "Host Bot এ স্বাগতম",
-        desc: "Python 3.10 cloud sandbox is active with ৳117.50 starter balance.",
-        descBn: "আপনার ক্লাউড স্যান্ডবক্স প্রস্তুত এবং ওয়ালেটে ৳১১৭.৫০ প্রারম্ভিক ব্যালেন্স যুক্ত আছে।",
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
+        desc: "Python 3.10 cloud bot hosting sandbox is active.",
+        descBn: "আপনার ক্লাউড বট হোস্টিং স্যান্ডবক্স প্রস্তুত আছে।",
+        timestamp: new Date().toISOString(),
         type: "system",
         read: false,
         link: "/home",

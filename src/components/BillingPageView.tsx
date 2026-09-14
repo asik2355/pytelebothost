@@ -45,7 +45,7 @@ export const BillingPageView: React.FC<BillingPageViewProps> = ({
   onAddNotification,
 }) => {
   const [wallet, setWallet] = useState<WalletInfo>({
-    balance: 117.50,
+    balance: 0.00,
     currency: "৳",
     transactions: [],
   });

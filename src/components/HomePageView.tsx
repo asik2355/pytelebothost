@@ -516,11 +516,6 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
                         <h3 className="text-lg font-bold text-slate-900 leading-tight">
                           {srv.name}
                         </h3>
-                        {srv.isCustom && (
-                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-[#5438dc] border border-indigo-200/60">
-                            Custom
-                          </span>
-                        )}
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 flex-wrap">
                         <Network className="w-3.5 h-3.5" />

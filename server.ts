@@ -710,30 +710,13 @@ function getWalletData(): WalletData {
   } catch {
     // fallback
   }
-  return {
-    balance: 117.50, // Matches initial sample value in screenshot
+  const initialWallet: WalletData = {
+    balance: 0.00,
     currency: "৳",
-    transactions: [
-      {
-        id: "TX-1001",
-        amount: 100,
-        type: "deposit",
-        description: "Wallet Recharge (bKash)",
-        date: new Date(Date.now() - 86400000).toISOString(),
-        status: "completed",
-        method: "bKash",
-      },
-      {
-        id: "TX-1000",
-        amount: 17.50,
-        type: "deposit",
-        description: "Welcome Promotional Credit",
-        date: new Date(Date.now() - 172800000).toISOString(),
-        status: "completed",
-        method: "Promo",
-      }
-    ],
+    transactions: [],
   };
+  saveWalletData(initialWallet);
+  return initialWallet;
 }
 
 function saveWalletData(data: WalletData) {
@@ -1327,7 +1310,6 @@ app.post("/api/servers/create", (req, res) => {
     planName: planName || "Mini-v1",
     planPrice: numPrice,
     createdAt: new Date().toISOString(),
-    isCustom: true,
     port: numPort,
     ip: "194.163.148.91",
   };

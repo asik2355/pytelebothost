@@ -47,7 +47,7 @@ export const TopBanner: React.FC<TopBannerProps> = ({
   lang,
   setLang,
   status,
-  walletBalance = 117.50,
+  walletBalance = 0.00,
   currentRoute,
   onNavigate,
   onStartBot,
