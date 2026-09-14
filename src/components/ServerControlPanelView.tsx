@@ -34,6 +34,8 @@ import {
   Archive,
   File,
   Database,
+  Package,
+  Zap,
 } from "lucide-react";
 import { ActiveServer, AppNotification, BotLog, WorkspaceFile } from "../types";
 
@@ -100,6 +102,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const [fileToDelete, setFileToDelete] = useState<string | null>(null);
   const [isDeletingFile, setIsDeletingFile] = useState(false);
   const [isRefreshingFiles, setIsRefreshingFiles] = useState(false);
+  const [isInstallingDeps, setIsInstallingDeps] = useState(false);
 
   // Backups State
   const [backups, setBackups] = useState<Array<{ id: string; name: string; size: number; createdAt: string }>>([]);
@@ -322,9 +325,32 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     }
   };
 
+  const handleInstallDependencies = async () => {
+    setIsInstallingDeps(true);
+    try {
+      const res = await fetch(`/api/servers/${server.id}/install`, { method: "POST" });
+      if (res.ok) {
+        onAddNotification?.({
+          id: `install-${Date.now()}`,
+          title: "Package Installation Triggered",
+          titleBn: "ডিপেন্ডেন্সি ইনস্টলেশন শুরু হয়েছে",
+          desc: "Installing packages from requirements.txt...",
+          descBn: "requirements.txt এর প্যাকেজসমূহ ইনস্টল করা হচ্ছে...",
+          timestamp: new Date().toISOString(),
+          type: "system",
+          read: false,
+        });
+        setTimeout(fetchLogs, 1200);
+      }
+    } finally {
+      setIsInstallingDeps(false);
+    }
+  };
+
   const handleSaveFile = async () => {
     if (!selectedFile) return;
     setIsSavingFile(true);
+    const isReqs = selectedFile === "requirements.txt" || selectedFile === "package.json";
     try {
       const res = await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(selectedFile)}`, {
         method: "PUT",
@@ -334,10 +360,10 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
       if (res.ok) {
         onAddNotification?.({
           id: `file-save-${Date.now()}`,
-          title: "File Saved",
-          titleBn: "ফাইল সংরক্ষণ হয়েছে",
-          desc: `File "${selectedFile}" updated in ${server.name}.`,
-          descBn: `ফাইল "${selectedFile}" সার্ভার ${server.name}-এ সেভ হয়েছে।`,
+          title: isReqs ? "Requirements Updated & Installing" : "File Saved",
+          titleBn: isReqs ? "Requirements সেভ হয়েছে ও লাইব্রেরি ইনস্টল হচ্ছে" : "ফাইল সংরক্ষণ হয়েছে",
+          desc: isReqs ? `Updated ${selectedFile}. Dependencies are auto-installing.` : `File "${selectedFile}" updated in ${server.name}.`,
+          descBn: isReqs ? `${selectedFile} সেভ হয়েছে। স্বয়ংক্রিয়ভাবে লাইব্রেরি ইনস্টল হচ্ছে।` : `ফাইল "${selectedFile}" সার্ভার ${server.name}-এ সেভ হয়েছে।`,
           timestamp: new Date().toISOString(),
           type: "system",
           read: false,
@@ -353,6 +379,9 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           },
           ...prev,
         ]);
+        if (isReqs) {
+          setTimeout(fetchLogs, 1500);
+        }
       }
     } finally {
       setIsSavingFile(false);
@@ -403,6 +432,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
+    const isReqsOrZip = file.name === "requirements.txt" || file.name.endsWith(".zip");
     const formData = new FormData();
     formData.append("file", file);
     try {
@@ -416,14 +446,17 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
         loadFileContent(file.name);
         onAddNotification?.({
           id: `upload-${Date.now()}`,
-          title: "File Uploaded",
-          titleBn: "ফাইল আপলোড হয়েছে",
-          desc: `Uploaded ${file.name} to ${server.name}.`,
-          descBn: `${file.name} সার্ভার ${server.name}-এ আপলোড হয়েছে।`,
+          title: isReqsOrZip ? "File Uploaded & Processing Dependencies" : "File Uploaded",
+          titleBn: isReqsOrZip ? "ফাইল আপলোড হয়েছে ও প্যাকেজ প্রসেস হচ্ছে" : "ফাইল আপলোড হয়েছে",
+          desc: isReqsOrZip ? `Uploaded ${file.name}. Libraries are being installed.` : `Uploaded ${file.name} to ${server.name}.`,
+          descBn: isReqsOrZip ? `${file.name} আপলোড হয়েছে এবং প্যাকেজসমূহ ইনস্টল হচ্ছে।` : `${file.name} সার্ভার ${server.name}-এ আপলোড হয়েছে।`,
           timestamp: new Date().toISOString(),
           type: "system",
           read: false,
         });
+        if (isReqsOrZip) {
+          setTimeout(fetchLogs, 1500);
+        }
       }
     } finally {
       setIsUploading(false);
@@ -869,36 +902,15 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           <div className="bg-[#090d16] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[520px]">
             {/* Terminal Header */}
             <div className="bg-[#111726] px-4 py-2.5 border-b border-slate-800/80 flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
                 <TerminalIcon className="w-4 h-4 text-purple-400" />
-                <span className="font-mono font-bold text-slate-300">
-                  container@{server.name.toLowerCase()}:~$
-                </span>
-                <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">
-                  bash / pty
+                <span className="font-bold tracking-wider uppercase text-slate-100 text-xs sm:text-sm font-mono">
+                  LIVE CONSOLE
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !autoScrollLogs;
-                    setAutoScrollLogs(next);
-                    if (next && consoleContainerRef.current) {
-                      consoleContainerRef.current.scrollTop = consoleContainerRef.current.scrollHeight;
-                    }
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border ${
-                    autoScrollLogs
-                      ? "bg-purple-950/80 text-purple-300 border-purple-600/50 hover:bg-purple-900/80"
-                      : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200"
-                  }`}
-                  title={autoScrollLogs ? "Auto-scroll is Enabled" : "Auto-scroll is Disabled"}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${autoScrollLogs ? "bg-emerald-400" : "bg-slate-500"}`} />
-                  <span>Auto-scroll</span>
-                </button>
                 <button
                   type="button"
                   onClick={handleCopyLogs}
@@ -999,6 +1011,24 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
             {/* Actions Toolbar */}
             <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Install Packages Button */}
+              {files.some((f) => f.name === "requirements.txt" || f.name === "package.json") && (
+                <button
+                  type="button"
+                  onClick={handleInstallDependencies}
+                  disabled={isInstallingDeps}
+                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 active:scale-95 text-emerald-300 hover:text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+                  title="Install all libraries from requirements.txt / package.json"
+                >
+                  {isInstallingDeps ? (
+                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
+                  ) : (
+                    <Zap className="w-4 h-4 text-emerald-400" />
+                  )}
+                  <span>{isInstallingDeps ? "Installing..." : "Install Pip Reqs"}</span>
+                </button>
+              )}
+
               {/* Refresh Files Button */}
               <button
                 type="button"
@@ -1055,6 +1085,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                 const isDb = file.name.endsWith(".db") || file.name.endsWith(".sqlite") || file.name.endsWith(".sqlite3") || file.name.endsWith(".sql");
                 const isJson = file.name.endsWith(".json");
                 const isCode = file.name.endsWith(".py") || file.name.endsWith(".go") || file.name.endsWith(".js") || file.name.endsWith(".ts");
+                const isReqs = file.name === "requirements.txt";
 
                 return (
                   <div
@@ -1087,6 +1118,8 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                           <FileCode className="w-5 h-5 text-amber-400 shrink-0" />
                         ) : isCode ? (
                           <FileCode className="w-5 h-5 text-purple-400 shrink-0" />
+                        ) : isReqs ? (
+                          <Package className="w-5 h-5 text-sky-400 shrink-0" />
                         ) : (
                           <FileText className="w-5 h-5 text-slate-400 shrink-0" />
                         )}
@@ -1094,6 +1127,12 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                         <span className="font-mono text-sm text-slate-200 group-hover:text-white font-medium truncate">
                           {file.name}
                         </span>
+
+                        {isReqs && (
+                          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                            Auto-pip
+                          </span>
+                        )}
                       </div>
                     </div>
 

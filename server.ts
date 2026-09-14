@@ -918,187 +918,18 @@ function ensureServerWorkspace(server: ServerRecord) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  // Once a workspace is initialized, DO NOT recreate deleted files!
+  // Once a workspace is initialized, DO NOT create fake files!
   const initMarker = path.join(dir, ".initialized");
-  if (fs.existsSync(initMarker)) {
-    return;
-  }
-
-  const config = getServerConfig(server.id, server);
-
-  // Category specific template files
-  if (server.category === "golang") {
-    const mainGo = path.join(dir, "main.go");
-    if (!fs.existsSync(mainGo)) {
-      fs.writeFileSync(
-        mainGo,
-        `package main
-
-import (
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"time"
-)
-
-func main() {
-	serverName := os.Getenv("SERVER_NAME")
-	if serverName == "" {
-		serverName = "${server.name}"
-	}
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "${config.port}"
-	}
-
-	fmt.Printf("[%s] 🚀 Golang Server '%s' starting up on :%s ...\\n", time.Now().Format("15:04:05"), serverName, port)
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello from Golang Server '%s'! Status: Healthy (Host Bot Cloud)\\n", serverName)
-	})
-
-	log.Printf("Listening on http://0.0.0.0:%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
-}
-`,
-        "utf-8"
-      );
-    }
-
-    const goMod = path.join(dir, "go.mod");
-    if (!fs.existsSync(goMod)) {
-      fs.writeFileSync(goMod, `module hostbot/server\n\ngo 1.21\n`, "utf-8");
-    }
-  } else if (server.category === "node.js generic") {
-    const indexJs = path.join(dir, "index.js");
-    if (!fs.existsSync(indexJs)) {
-      fs.writeFileSync(
-        indexJs,
-        `const http = require("http");
-const serverName = process.env.SERVER_NAME || "${server.name}";
-const port = process.env.PORT || ${config.port};
-
-console.log(\`[\${new Date().toLocaleTimeString()}] 🚀 Node.js server '\${serverName}' starting on port \${port}...\`);
-
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end(\`Node.js Server '\${serverName}' is running on Host Bot Cloud!\\n\`);
-});
-
-server.listen(port, "0.0.0.0", () => {
-  console.log(\`[\${new Date().toLocaleTimeString()}] 🌐 Server listening on http://0.0.0.0:\${port}\`);
-});
-`,
-        "utf-8"
-      );
-    }
-
-    const pkgJson = path.join(dir, "package.json");
-    if (!fs.existsSync(pkgJson)) {
-      fs.writeFileSync(
-        pkgJson,
-        JSON.stringify(
-          {
-            name: server.name.toLowerCase().replace(/[^a-z0-9]/g, "-"),
-            version: "1.0.0",
-            main: "index.js",
-            scripts: { start: "node index.js" },
-          },
-          null,
-          2
-        ),
-        "utf-8"
-      );
-    }
-  } else if (server.category === "Bun") {
-    const indexTs = path.join(dir, "index.ts");
-    if (!fs.existsSync(indexTs)) {
-      fs.writeFileSync(
-        indexTs,
-        `const port = process.env.PORT || ${config.port};
-const name = process.env.SERVER_NAME || "${server.name}";
-
-console.log(\`🚀 Bun server '\${name}' active on port \${port}\`);
-
-export default {
-  port,
-  fetch(req: Request) {
-    return new Response(\`Bun Server '\${name}' online on Host Bot Cloud!\\n\`);
-  },
-};
-`,
-        "utf-8"
-      );
-    }
-  } else {
-    // Default: Python 3
-    const mainPy = path.join(dir, "main.py");
-    if (!fs.existsSync(mainPy)) {
-      fs.writeFileSync(
-        mainPy,
-        `import os
-import sys
-import time
-
-server_name = os.getenv("SERVER_NAME", "${server.name}")
-token = os.getenv("BOT_TOKEN", "7129849204:AAF-x9q...")
-
-print(f"[{time.strftime('%X')}] 🚀 Initializing '{server_name}' Python Bot Container...")
-print(f"[{time.strftime('%X')}] 🐍 Python Version: {sys.version.split()[0]}")
-print(f"[{time.strftime('%X')}] 🤖 Telegram Bot Token loaded: {'Configured' if token and not token.startswith('your_') else 'Ready'}")
-print(f"[{time.strftime('%X')}] 🟢 Bot listening for incoming webhooks & polling...")
-
-cycle = 1
-while True:
-    time.sleep(15)
-    print(f"[{time.strftime('%X')}] 💓 [{server_name}] Health Check Cycle #{cycle} OK - 0 errors")
-    sys.stdout.flush()
-    cycle += 1
-`,
-        "utf-8"
-      );
-    }
-
-    const reqs = path.join(dir, "requirements.txt");
-    if (!fs.existsSync(reqs)) {
-      fs.writeFileSync(
-        reqs,
-        `python-telegram-bot>=20.0\nrequests>=2.31.0\npython-dotenv>=1.0.0\n`,
-        "utf-8"
-      );
+  if (!fs.existsSync(initMarker)) {
+    try {
+      fs.writeFileSync(initMarker, new Date().toISOString(), "utf-8");
+    } catch {
+      // ignore
     }
   }
 
-  // Common files: .env and README.md
-  const envFile = path.join(dir, ".env");
-  if (!fs.existsSync(envFile)) {
-    const envLines = config.envVars.map((e) => `${e.key}=${e.value}`).join("\n");
-    fs.writeFileSync(envFile, envLines + "\n", "utf-8");
-  }
-
-  const readme = path.join(dir, "README.md");
-  if (!fs.existsSync(readme)) {
-    fs.writeFileSync(
-      readme,
-      `# ${server.name}
-
-- **Category:** ${server.category}
-- **Plan:** ${server.planName}
-- **Port:** ${config.port}
-- **Node:** EU-01 • Host Bot High-Speed Cloud
-- **Status:** Dedicated Container Isolation
-`,
-      "utf-8"
-    );
-  }
-
-  // Mark initialized
-  try {
-    fs.writeFileSync(initMarker, new Date().toISOString(), "utf-8");
-  } catch {
-    // ignore
-  }
+  // Ensure config file exists
+  getServerConfig(server.id, server);
 }
 
 function getServerRuntime(serverId: string): ServerRuntime {
@@ -1334,6 +1165,109 @@ app.post("/api/servers/create", (req, res) => {
   });
 });
 
+// Build high-performance environment matching RAM & processor allocation
+function getOptimizedProcEnv(server: ServerRecord, config: any, sDir: string) {
+  const envFile = path.join(sDir, ".env");
+  const parsedFileEnv: Record<string, string> = {};
+  if (fs.existsSync(envFile)) {
+    try {
+      const lines = fs.readFileSync(envFile, "utf-8").split("\n");
+      for (const l of lines) {
+        const trimmed = l.trim();
+        if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
+          const idx = trimmed.indexOf("=");
+          const k = trimmed.slice(0, idx).trim();
+          const v = trimmed.slice(idx + 1).trim();
+          if (k) parsedFileEnv[k] = v;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const customEnv: Record<string, string> = {};
+  for (const item of config.envVars || []) {
+    if (item.key) customEnv[item.key] = item.value;
+  }
+
+  return {
+    ...process.env,
+    ...parsedFileEnv,
+    ...customEnv,
+    SERVER_ID: server.id,
+    SERVER_NAME: server.name,
+    PORT: config.port?.toString() || "25000",
+    PYTHONUNBUFFERED: "1",
+    PYTHONOPTIMIZE: "1",
+    PYTHONDONTWRITEBYTECODE: "0",
+    PYTHONHASHSEED: "random",
+    MALLOC_ARENA_MAX: "2",
+    UV_THREADPOOL_SIZE: "8",
+    NODE_OPTIONS: "--max-old-space-size=512",
+    GODEBUG: "madvdontneed=1",
+  };
+}
+
+// Automatic dependency installer for requirements.txt, package.json, go.mod
+function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: any, onComplete?: (success: boolean) => void) {
+  const env = procEnv || { ...process.env, PYTHONUNBUFFERED: "1" };
+  const reqFile = path.join(sDir, "requirements.txt");
+  const pkgFile = path.join(sDir, "package.json");
+  const goModFile = path.join(sDir, "go.mod");
+
+  if (fs.existsSync(reqFile) && fs.readFileSync(reqFile, "utf-8").trim().length > 0) {
+    addServerLog(serverId, "pip", `📦 [Pip Manager] Scanning requirements.txt & installing dependencies...`);
+    const pipCmd = `pip3 install --no-cache-dir --prefer-binary -r "${reqFile}"`;
+    exec(pipCmd, { cwd: sDir, env }, (err, stdout, stderr) => {
+      if (stdout) {
+        const lines = stdout.split("\n").filter((l) => l.trim().length > 0 && !l.includes("WARNING: Running pip as the 'root'"));
+        for (const l of lines) {
+          addServerLog(serverId, "pip", l);
+        }
+      }
+      if (stderr && stderr.trim().length > 0) {
+        const errLines = stderr.split("\n").filter((l) => l.trim().length > 0 && !l.includes("WARNING: Running pip as the 'root'"));
+        for (const l of errLines) {
+          addServerLog(serverId, "stderr", l);
+        }
+      }
+      if (err) {
+        addServerLog(serverId, "stderr", `⚠️ Pip installation notice: ${err.message}`);
+        onComplete?.(false);
+      } else {
+        addServerLog(serverId, "pip", `✅ [Pip Manager] All requirements successfully installed & ready.`);
+        onComplete?.(true);
+      }
+    });
+    return;
+  }
+
+  if (fs.existsSync(pkgFile)) {
+    addServerLog(serverId, "system", `📦 [NPM Manager] Running npm install...`);
+    exec("npm install --prefer-offline --no-audit", { cwd: sDir, env }, (err, stdout, stderr) => {
+      if (stdout) addServerLog(serverId, "stdout", stdout.trim());
+      if (err) {
+        addServerLog(serverId, "stderr", `NPM install notice: ${err.message}`);
+        onComplete?.(false);
+      } else {
+        addServerLog(serverId, "system", `✅ [NPM Manager] Packages installed.`);
+        onComplete?.(true);
+      }
+    });
+    return;
+  }
+
+  if (fs.existsSync(goModFile)) {
+    exec("go mod tidy", { cwd: sDir, env }, () => {
+      onComplete?.(true);
+    });
+    return;
+  }
+
+  onComplete?.(true);
+}
+
 // 3. Server Actions: Start, Stop, Restart (Per Server Process Isolation)
 app.post("/api/servers/action", (req, res) => {
   const { serverId, action } = req.body;
@@ -1427,23 +1361,6 @@ app.post("/api/servers/action", (req, res) => {
       }
     }
 
-    // Build environment
-    const customEnv: Record<string, string> = {};
-    for (const item of config.envVars || []) {
-      if (item.key) customEnv[item.key] = item.value;
-    }
-    const procEnv = {
-      ...process.env,
-      ...parsedFileEnv,
-      ...customEnv,
-      SERVER_ID: server.id,
-      SERVER_NAME: server.name,
-      PORT: config.port?.toString() || "25000",
-      PYTHONUNBUFFERED: "1",
-    };
-
-    // Check if requirements.txt exists and check dependencies
-    const reqFile = path.join(sDir, "requirements.txt");
     const runServerProcess = () => {
       addServerLog(server.id, "system", `🚀 Executing command: ${cmdStr}`);
 
@@ -1499,25 +1416,10 @@ app.post("/api/servers/action", (req, res) => {
       }
     };
 
-    if (fs.existsSync(reqFile) && fs.readFileSync(reqFile, "utf-8").trim().length > 0) {
-      addServerLog(server.id, "pip", `📦 Found requirements.txt. Checking package dependencies...`);
-      exec(`pip3 install -r "${reqFile}"`, { cwd: sDir, env: procEnv }, (err, stdout, stderr) => {
-        if (stdout) {
-          const lines = stdout.split("\n").filter((l) => l.trim().length > 0 && !l.includes("WARNING: Running pip as the 'root'"));
-          for (const l of lines.slice(-5)) {
-            addServerLog(server.id, "pip", l);
-          }
-        }
-        if (err) {
-          addServerLog(server.id, "stderr", `Pip install notice: ${err.message}`);
-        } else {
-          addServerLog(server.id, "pip", `✅ Dependencies verified.`);
-        }
-        runServerProcess();
-      });
-    } else {
+    const procEnv = getOptimizedProcEnv(server, config, sDir);
+    checkAndInstallDependencies(server.id, sDir, procEnv, () => {
       runServerProcess();
-    }
+    });
     return;
   }
 
@@ -1691,6 +1593,18 @@ app.put("/api/servers/:id/files/:filename", (req, res) => {
   try {
     fs.writeFileSync(filePath, content ?? "", "utf-8");
     addServerLog(id, "system", `💾 File saved: ${safeName} (${(content || "").length} bytes)`);
+
+    // Auto-detect and install updated dependencies immediately
+    if (safeName === "requirements.txt" || safeName === "package.json") {
+      const servers = getServersData();
+      const server = servers.find((s) => s.id === id);
+      if (server) {
+        const config = getServerConfig(id, server);
+        const procEnv = getOptimizedProcEnv(server, config, sDir);
+        checkAndInstallDependencies(id, sDir, procEnv);
+      }
+    }
+
     res.json({ success: true, name: safeName });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1761,8 +1675,57 @@ app.post("/api/servers/:id/files/upload", serverMulter.single("file"), (req, res
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
-  addServerLog(id, "system", `📁 File uploaded: ${req.file.originalname} (${req.file.size} bytes)`);
-  res.json({ success: true, filename: req.file.originalname, size: req.file.size });
+
+  const sDir = getServerDir(id);
+  const uploadedName = req.file.originalname;
+  const isZip = uploadedName.toLowerCase().endsWith(".zip");
+
+  addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${req.file.size} bytes)`);
+
+  if (isZip) {
+    addServerLog(id, "system", `📦 Auto-extracting ZIP archive: ${uploadedName}...`);
+    exec(`unzip -o "${req.file.path}" -d "${sDir}"`, { cwd: sDir }, (unzipErr, stdout) => {
+      if (unzipErr) {
+        addServerLog(id, "stderr", `⚠️ Unzip error: ${unzipErr.message}`);
+      } else {
+        addServerLog(id, "system", `✅ ZIP contents successfully extracted.`);
+        const servers = getServersData();
+        const server = servers.find((s) => s.id === id);
+        if (server) {
+          const config = getServerConfig(id, server);
+          const procEnv = getOptimizedProcEnv(server, config, sDir);
+          checkAndInstallDependencies(id, sDir, procEnv);
+        }
+      }
+    });
+  } else if (uploadedName === "requirements.txt" || uploadedName === "package.json") {
+    const servers = getServersData();
+    const server = servers.find((s) => s.id === id);
+    if (server) {
+      const config = getServerConfig(id, server);
+      const procEnv = getOptimizedProcEnv(server, config, sDir);
+      checkAndInstallDependencies(id, sDir, procEnv);
+    }
+  }
+
+  res.json({ success: true, filename: uploadedName, size: req.file.size });
+});
+
+// 10a. Explicit Dependency Install Trigger
+app.post("/api/servers/:id/install", (req, res) => {
+  const { id } = req.params;
+  const servers = getServersData();
+  const server = servers.find((s) => s.id === id);
+  if (!server) {
+    return res.status(404).json({ error: "Server not found" });
+  }
+  const sDir = getServerDir(id);
+  const config = getServerConfig(id, server);
+  const procEnv = getOptimizedProcEnv(server, config, sDir);
+
+  checkAndInstallDependencies(id, sDir, procEnv, (success) => {
+    res.json({ success, message: success ? "Dependencies installed successfully" : "Installation finished with notices" });
+  });
 });
 
 // 10b. Server Backups
