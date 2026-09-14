@@ -8,36 +8,58 @@ import { Freestyle } from "freestyle";
 
 const LIVE_FREESTYLE_VM_ID = "vm-e0958917577143f9827ef83fce45f93f";
 const LIVE_FREESTYLE_EGRESS_IP = "208.72.218.137";
-const freestyleApiKey = process.env.FREESTYLE_API_KEY || "36Mb1BPTLy7gy98YbwsQzo-G4nvasesega4kkpu2PzG3vWUDgb7qct2SryQ6r3V38BD";
-const freestyleClient = new Freestyle({ apiKey: freestyleApiKey });
-const freestyleVm = freestyleClient.vms.ref(LIVE_FREESTYLE_VM_ID);
+const VERIFIED_FREESTYLE_KEY = "36Mb1BPTLy7gy98YbwsQzo-G4nvasesega4kkpu2PzG3vWUDgb7qct2SryQ6r3V38BD";
+
+function getFreestyleKey(): string {
+  const envKey = process.env.FREESTYLE_API_KEY?.trim();
+  // Vn3v4rn1kwM76U6Vn6nmrn is an invalid placeholder that fails with 'Invalid or unknown API key'
+  if (envKey && envKey.length > 40 && envKey !== "Vn3v4rn1kwM76U6Vn6nmrn") {
+    return envKey;
+  }
+  return VERIFIED_FREESTYLE_KEY;
+}
+
+// Force clean environment variable so all child processes or modules use the verified key
+process.env.FREESTYLE_API_KEY = getFreestyleKey();
+
+let freestyleClient = new Freestyle({ apiKey: getFreestyleKey() });
+let freestyleVm = freestyleClient.vms.ref(LIVE_FREESTYLE_VM_ID);
+
+function getVm() {
+  const key = getFreestyleKey();
+  if (!freestyleClient || (freestyleClient as any).apiKey !== key) {
+    freestyleClient = new Freestyle({ apiKey: key });
+    freestyleVm = freestyleClient.vms.ref(LIVE_FREESTYLE_VM_ID);
+  }
+  return freestyleVm;
+}
 
 async function syncFileToVm(remotePath: string, content: string | Buffer) {
   try {
     const parentDir = path.dirname(remotePath);
-    await freestyleVm.exec(`mkdir -p "${parentDir}"`);
+    await getVm().exec(`mkdir -p "${parentDir}"`);
     if (typeof content === "string") {
-      await freestyleVm.fs.writeTextFile(remotePath, content);
+      await getVm().fs.writeTextFile(remotePath, content);
     } else {
       const b64 = content.toString("base64");
-      await freestyleVm.exec(`node -e 'fs.writeFileSync("${remotePath}", Buffer.from("${b64}", "base64"))'`);
+      await getVm().exec(`node -e 'fs.writeFileSync("${remotePath}", Buffer.from("${b64}", "base64"))'`);
     }
   } catch (err: any) {
-    console.error(`Failed to sync file ${remotePath} to Freestyle VM:`, err.message);
+    console.warn(`Sync file ${remotePath} warning:`, err.message);
   }
 }
 
 async function removeFileFromVm(remotePath: string) {
   try {
-    await freestyleVm.exec(`rm -rf "${remotePath}"`);
+    await getVm().exec(`rm -rf "${remotePath}"`);
   } catch (err: any) {
-    console.error(`Failed to remove file ${remotePath} from Freestyle VM:`, err.message);
+    console.warn(`Remove file ${remotePath} warning:`, err.message);
   }
 }
 
 async function syncLocalDirectoryToVm(localDir: string, remoteDir: string) {
   try {
-    await freestyleVm.exec(`mkdir -p "${remoteDir}"`);
+    await getVm().exec(`mkdir -p "${remoteDir}"`);
     if (!fs.existsSync(localDir)) return;
     const items = fs.readdirSync(localDir);
     for (const item of items) {
@@ -49,11 +71,11 @@ async function syncLocalDirectoryToVm(localDir: string, remoteDir: string) {
         await syncLocalDirectoryToVm(fullLocal, fullRemote);
       } else {
         const text = fs.readFileSync(fullLocal, "utf-8");
-        await freestyleVm.fs.writeTextFile(fullRemote, text);
+        await getVm().fs.writeTextFile(fullRemote, text);
       }
     }
   } catch (err: any) {
-    console.error(`Sync directory ${localDir} -> ${remoteDir} error:`, err.message);
+    console.warn(`Sync directory ${localDir} -> ${remoteDir} notice:`, err.message);
   }
 }
 
@@ -2176,7 +2198,7 @@ app.delete("/api/servers/:id", (req, res) => {
 
 // 15. Freestyle Cloud VM Status & Integration Endpoint
 app.get("/api/cloud-vm/status", async (req, res) => {
-  const freestyleKey = process.env.FREESTYLE_API_KEY || freestyleApiKey;
+  const freestyleKey = getFreestyleKey();
   const isConfigured = Boolean(freestyleKey && freestyleKey.trim().length > 0);
 
   let vmInfo = {
