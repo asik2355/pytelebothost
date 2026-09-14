@@ -148,60 +148,18 @@ export const TopBanner: React.FC<TopBannerProps> = ({
           className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group"
           title="Host Bot Home"
         >
-          {/* Custom Host Bot Circular Logo */}
-          <div className="relative w-7.5 h-7.5 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0">
-            {/* Multi-color arc rings matching design */}
-            <svg
-              className="absolute inset-0 w-full h-full"
-              viewBox="0 0 44 44"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {/* Cyan Arc (Top-Left) */}
-              <circle
-                cx="22"
-                cy="22"
-                r="19"
-                stroke="url(#cyan-grad)"
-                strokeWidth="3.2"
-                strokeDasharray="45 75"
-                strokeDashoffset="15"
-                strokeLinecap="round"
-              />
-              {/* Magenta/Pink Arc (Bottom-Right) */}
-              <circle
-                cx="22"
-                cy="22"
-                r="19"
-                stroke="url(#magenta-grad)"
-                strokeWidth="3.2"
-                strokeDasharray="40 80"
-                strokeDashoffset="-50"
-                strokeLinecap="round"
-              />
-              {/* Inner Soft Circle */}
-              <circle cx="22" cy="22" r="14.5" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
-
-              <defs>
-                <linearGradient id="cyan-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#06b6d4" />
-                  <stop offset="100%" stopColor="#38bdf8" />
-                </linearGradient>
-                <linearGradient id="magenta-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#ec4899" />
-                  <stop offset="100%" stopColor="#a855f7" />
-                </linearGradient>
-              </defs>
-            </svg>
-
-            {/* Letter H */}
-            <span className="relative z-10 font-extrabold text-xs sm:text-sm text-indigo-600 tracking-tight font-sans">
-              H
-            </span>
+          {/* Official Host Bot Logo Image */}
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden shrink-0 flex items-center justify-center shadow-xs">
+            <img
+              src="/logo.svg"
+              alt="Host Bot Logo"
+              className="w-full h-full object-contain"
+              referrerPolicy="no-referrer"
+            />
           </div>
 
           {/* Host Bot Text */}
-          <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 font-sans group-hover:text-indigo-600 transition-colors">
+          <span className="text-base sm:text-lg font-black tracking-tight text-slate-900 font-sans group-hover:text-indigo-600 transition-colors">
             Host Bot
           </span>
         </div>
@@ -525,14 +483,22 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                   {/* Brand Header */}
                   <div className="p-4 sm:p-5 flex items-center justify-between border-b border-slate-100">
                     <div className="flex items-center gap-3">
-                      {/* Stylized rounded gradient icon */}
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-600 p-0.5 shadow-sm flex items-center justify-center shrink-0">
-                        <div className="w-full h-full bg-white/95 rounded-[10px] flex items-center justify-center">
-                          <Bot className="w-5 h-5 text-indigo-600" />
+                      {/* Stylized rounded logo icon */}
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4f46e5] to-[#8b5cf6] p-0.5 shadow-sm flex items-center justify-center shrink-0">
+                        <div className="w-full h-full bg-slate-900 rounded-[10px] flex items-center justify-center overflow-hidden">
+                          <img
+                            src="/logo.svg"
+                            alt="Host Bot Logo"
+                            className="w-6 h-6 object-contain"
+                            referrerPolicy="no-referrer"
+                          />
                         </div>
                       </div>
                       <div>
                         <span className="font-extrabold text-slate-900 text-base tracking-tight font-sans block">
+                          Host Bot
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono block">
                           bot-host.xyz
                         </span>
                       </div>

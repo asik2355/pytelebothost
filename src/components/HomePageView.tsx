@@ -376,6 +376,7 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
         </div>
       </div>
 
+
       {/* 3. Active Servers Section matching Screenshot 2 */}
       <div className="space-y-4 pt-2">
         {/* Section Header */}

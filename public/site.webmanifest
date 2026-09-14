@@ -1,0 +1,23 @@
+{
+  "name": "Host Bot - Telegram Bot Cloud Hosting",
+  "short_name": "Host Bot",
+  "description": "Deploy and manage Python Telegram bots, high-speed cloud servers, and 24/7 hosting with live terminal logs.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

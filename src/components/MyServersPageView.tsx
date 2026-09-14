@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { ActiveServer, AppNotification, AuthUser } from "../types";
 import { PurchasePlanModal, PlanToPurchase } from "./PurchasePlanModal";
-import { Lock, LogIn, UserPlus } from "lucide-react";
+import { Lock, LogIn, UserPlus, Zap } from "lucide-react";
 
 interface MyServersPageViewProps {
   servers: ActiveServer[];
@@ -173,7 +173,7 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
             onClick={() => {
               setDeployPlan({
                 id: "mini-v1",
-                name: "Mini-v1",
+                name: "Mini-v1 (2 GB RAM)",
                 price: 100,
               });
               setIsDeployModalOpen(true);

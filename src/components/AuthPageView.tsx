@@ -220,6 +220,22 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
       </div>
 
       <div className="max-w-md mx-auto w-full bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-xl overflow-hidden p-6 sm:p-8">
+        {/* Brand Logo Header */}
+        <div className="flex flex-col items-center justify-center text-center mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#4f46e5] to-[#8b5cf6] p-0.5 shadow-md flex items-center justify-center mb-2.5">
+            <div className="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center overflow-hidden">
+              <img
+                src="/logo.svg"
+                alt="Host Bot Logo"
+                className="w-8 h-8 object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">Host Bot</h2>
+          <p className="text-xs text-slate-500 mt-0.5 font-mono">bot-host.xyz</p>
+        </div>
+
         {/* Authentication Forms */}
         <div className="flex flex-col justify-center">
           {/* Header Switcher Tabs */}

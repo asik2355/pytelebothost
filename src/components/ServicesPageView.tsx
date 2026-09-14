@@ -80,40 +80,60 @@ export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
       period: lang === "bn" ? "/ মাস" : "/ month",
       description:
         lang === "bn"
-          ? "জনপ্রিয় ক্লাউড গেম ও টেলিগ্রাম বট সার্ভার (পাইথন, নোড, গো ও বান সাপোর্ট)।"
-          : "High-speed cloud runner for 24/7 bots (Python3, Node.js, Go, Bun).",
+          ? "জনপ্রিয় স্ট্যান্ডার্ড হোস্টিং সার্ভার (পাইথন, নোড ও টেলিগ্রাম বট)।"
+          : "Standard hosting server for Python & Node.js Telegram bots.",
       features: [
-        lang === "bn" ? "১টি হাই-স্পিড ডেডিকেটেড সার্ভার" : "1 High-Speed Server Instance",
-        lang === "bn" ? "১ জিবি ডিডিআর৪ মেমোরি / ১ কোর" : "1 GB Fast RAM / 1 Core",
-        lang === "bn" ? "Python3, Node.js, Go, Bun নির্বাচন" : "Python3, Node.js, Go, Bun Runtimes",
-        lang === "bn" ? "২৪/৭ ক্লাউড অটো-রিস্টার্ট" : "24/7 Cloud Auto-restart & Uptime",
-        lang === "bn" ? "ওয়েব টার্মিনাল ও ফাইল এডিটর" : "Full Web Terminal & File Access",
+        lang === "bn" ? "র‍্যাম: ৫১২ এমবি (512 MB)" : "RAM: 512 MB",
+        lang === "bn" ? "এসএসডি: ২ জিবি (2 GB SSD)" : "SSD: 2 GB SSD",
+        lang === "bn" ? "সিপিইউ: ৫০% কোর (50% Core)" : "CPU: 50% Core",
+        lang === "bn" ? "২৪/৭ লাইভ আপটাইম ও টার্মিনাল" : "24/7 Live Uptime & Terminal",
       ],
       isPopular: true,
-      buttonText: lang === "bn" ? "Mini-v1 কিনুন" : "Get Mini-v1",
+      buttonText: lang === "bn" ? "Order Now (৳১০০)" : "Order Now",
+      isCurrent: false,
+    },
+    {
+      id: "mini-v2",
+      name: "Mini- v2",
+      priceMonthly: "৳ 150",
+      priceYearly: "৳ 1,500",
+      numPriceMonthly: 150,
+      numPriceYearly: 1500,
+      period: lang === "bn" ? "/ মাস" : "/ month",
+      description:
+        lang === "bn"
+          ? "উচ্চগতির পারফর্মেন্স ও বড় বটের জন্য উপযুক্ত হোস্টিং।"
+          : "Enhanced cloud runner for larger bots and databases.",
+      features: [
+        lang === "bn" ? "র‍্যাম: ৭৬৮ এমবি (768 MB)" : "RAM: 768 MB",
+        lang === "bn" ? "এসএসডি: ৩ জিবি (3 GB SSD)" : "SSD: 3 GB SSD",
+        lang === "bn" ? "সিপিইউ: ৭৫% কোর (75% Core)" : "CPU: 75% Core",
+        lang === "bn" ? "২৪/৭ অটো-রিস্টার্ট সাপোর্ট" : "24/7 Auto-restart Support",
+      ],
+      isPopular: false,
+      buttonText: lang === "bn" ? "Order Now (৳১৫০)" : "Order Now",
       isCurrent: false,
     },
     {
       id: "pro",
-      name: lang === "bn" ? "প্রো ডেভেলপার" : "Pro Developer",
-      priceMonthly: "৳ 299",
-      priceYearly: "৳ 2,990",
-      numPriceMonthly: 299,
-      numPriceYearly: 2990,
+      name: "Pro Developer",
+      priceMonthly: "৳ 250",
+      priceYearly: "৳ 2,500",
+      numPriceMonthly: 250,
+      numPriceYearly: 2500,
       period: lang === "bn" ? "/ মাস" : "/ month",
       description:
         lang === "bn"
-          ? "২৪/৭ নিরবচ্ছিন্ন হোস্টিং এবং ভারী ডেটা প্রসেসিং বটের জন্য।"
-          : "For production Telegram bots requiring 24/7 uptime & fast processing.",
+          ? "হেভি ট্রাফিক ও একাধিক টেলিগ্রাম বট হোস্টিংয়ের জন্য।"
+          : "For production Telegram bots requiring extra memory.",
       features: [
-        lang === "bn" ? "৫টি যুগপত টেলিগ্রাম বট" : "5 Simultaneous Telegram Bots",
-        lang === "bn" ? "২ জিবি হাই-স্পিড মেমোরি" : "2 GB High-Speed Memory",
-        lang === "bn" ? "অটো-রিস্টার্ট এবং হেলথ মনিটরিং" : "Auto-restart & 24/7 Health Monitoring",
-        lang === "bn" ? "কাস্টম এনভায়রনমেন্ট সিক্রেটস" : "Unlimited Custom Secrets & Env",
-        lang === "bn" ? "অগ্রাধিকার ভিত্তিক টেলিগ্রাম সাপোর্ট" : "Priority Telegram Support (1 hr SLA)",
+        lang === "bn" ? "র‍্যাম: ১ জিবি (1 GB RAM)" : "RAM: 1 GB RAM",
+        lang === "bn" ? "এসএসডি: ৫ জিবি (5 GB SSD)" : "SSD: 5 GB SSD",
+        lang === "bn" ? "সিপিইউ: ১০০% কোর (100% Core)" : "CPU: 100% Core",
+        lang === "bn" ? "অগ্রাধিকার ভিত্তিক টেলিগ্রাম সাপোর্ট" : "Priority Telegram Support",
       ],
       isPopular: false,
-      buttonText: lang === "bn" ? "প্রো আপগ্রেড করুন" : "Upgrade to Pro",
+      buttonText: lang === "bn" ? "Order Now (৳২৫০)" : "Order Now",
       isCurrent: false,
     },
     {

@@ -27,6 +27,12 @@ const CATEGORIES: { id: ServerCategory; label: string }[] = [
   { id: "Bun", label: "Bun" },
 ];
 
+const AVAILABLE_PLANS: PlanToPurchase[] = [
+  { id: "mini-v1", name: "Mini-v1 (512 MB RAM • 2 GB SSD)", price: 100 },
+  { id: "mini-v2", name: "Mini- v2 (768 MB RAM • 3 GB SSD)", price: 150 },
+  { id: "pro", name: "Pro Developer (1 GB RAM • 5 GB SSD)", price: 250 },
+];
+
 export const PurchasePlanModal: React.FC<PurchasePlanModalProps> = ({
   isOpen,
   plan,
@@ -41,10 +47,12 @@ export const PurchasePlanModal: React.FC<PurchasePlanModalProps> = ({
 
   const [serverName, setServerName] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ServerCategory>("python3");
+  const [selectedPlanId, setSelectedPlanId] = useState<string>(plan.id || "mini-v1");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const price = plan.price;
+  const currentPlan = AVAILABLE_PLANS.find((p) => p.id === selectedPlanId) || plan;
+  const price = currentPlan.price;
   const isInsufficient = price > 0 && walletBalance < price;
 
   const handleConfirmPurchase = async () => {
@@ -69,7 +77,7 @@ export const PurchasePlanModal: React.FC<PurchasePlanModalProps> = ({
         body: JSON.stringify({
           name: finalName,
           category: selectedCategory,
-          planName: plan.name,
+          planName: currentPlan.name,
           price: price,
         }),
       });
@@ -85,13 +93,13 @@ export const PurchasePlanModal: React.FC<PurchasePlanModalProps> = ({
         id: `notif-srv-${Date.now()}`,
         title: "Server Deployed Successfully",
         titleBn: "সার্ভার সফলভাবে তৈরি হয়েছে",
-        desc: `"${finalName}" (${selectedCategory}) under plan ${plan.name} has been deployed. You can start it from the Manage panel.`,
+        desc: `"${finalName}" (${selectedCategory}) under plan ${currentPlan.name} has been deployed. You can start it from the Manage panel.`,
         descBn: `"${finalName}" (${selectedCategory}) সার্ভার সফলভাবে তৈরি হয়েছে। Manage প্যানেল থেকে চালু করতে পারবেন।`,
         timestamp: new Date().toISOString(),
         type: "plan",
         read: false,
         amount: price,
-        planName: plan.name,
+        planName: currentPlan.name,
         link: "/home",
       });
 
@@ -138,6 +146,33 @@ export const PurchasePlanModal: React.FC<PurchasePlanModalProps> = ({
 
           {/* Form Content */}
           <div className="mt-5 space-y-5">
+            {/* Field 0: Select Hardware & RAM Allocation */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">
+                Select Hardware & RAM Plan
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {AVAILABLE_PLANS.map((p) => {
+                  const isPlanSelected = selectedPlanId === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setSelectedPlanId(p.id)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        isPlanSelected
+                          ? "border-2 border-[#5438dc] bg-[#5438dc]/5 text-[#5438dc] shadow-2xs font-bold"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="text-xs font-bold truncate">{p.name}</div>
+                      <div className="text-sm font-extrabold text-slate-900 mt-0.5">৳{p.price}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Field 1: Give your server a name */}
             <div>
               <label className="block text-sm font-semibold text-slate-900 mb-2">
