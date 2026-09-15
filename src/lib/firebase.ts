@@ -72,12 +72,12 @@ const getEnvVal = (viteKey: string, standardKey: string, jsonKey: string, fallba
 };
 
 const firebaseConfig = {
-  apiKey: getEnvVal("VITE_FIREBASE_API_KEY", "FIREBASE_API_KEY", "apiKey", "AIzaSyB-DEFAULT_BOTHOSTBD_KEY"),
+  apiKey: getEnvVal("VITE_FIREBASE_API_KEY", "FIREBASE_API_KEY", "apiKey", "AIzaSyDkEYObHhZndnBl0zMoFPAIr-2cotr1V_8"),
   authDomain: getEnvVal("VITE_FIREBASE_AUTH_DOMAIN", "FIREBASE_AUTH_DOMAIN", "authDomain", "bot-hostbd.firebaseapp.com"),
   projectId: getEnvVal("VITE_FIREBASE_PROJECT_ID", "FIREBASE_PROJECT_ID", "projectId", "bot-hostbd"),
-  storageBucket: getEnvVal("VITE_FIREBASE_STORAGE_BUCKET", "FIREBASE_STORAGE_BUCKET", "storageBucket", "bot-hostbd.appspot.com"),
-  messagingSenderId: getEnvVal("VITE_FIREBASE_MESSAGING_SENDER_ID", "FIREBASE_MESSAGING_SENDER_ID", "messagingSenderId", "1022124067652"),
-  appId: getEnvVal("VITE_FIREBASE_APP_ID", "FIREBASE_APP_ID", "appId", "1:1022124067652:web:1584c30cbe0a273b0a98f1"),
+  storageBucket: getEnvVal("VITE_FIREBASE_STORAGE_BUCKET", "FIREBASE_STORAGE_BUCKET", "storageBucket", "bot-hostbd.firebasestorage.app"),
+  messagingSenderId: getEnvVal("VITE_FIREBASE_MESSAGING_SENDER_ID", "FIREBASE_MESSAGING_SENDER_ID", "messagingSenderId", "432830986430"),
+  appId: getEnvVal("VITE_FIREBASE_APP_ID", "FIREBASE_APP_ID", "appId", "1:432830986430:web:37a3fea8cdc43e56d6c6ef"),
 };
 
 // Initialize Firebase
