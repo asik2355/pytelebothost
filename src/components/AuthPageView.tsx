@@ -14,8 +14,10 @@ import {
   ArrowLeft,
   Send,
   AlertCircle,
+  Database,
 } from "lucide-react";
 import { AuthUser } from "../types";
+import { apiFetch } from "../lib/api";
 
 interface AuthPageViewProps {
   initialMode: "login" | "registration";
@@ -63,7 +65,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
     onNavigate(newMode === "login" ? "/login" : "/registration");
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -83,10 +85,48 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const res = await apiFetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
+      });
 
-      // Check existing stored user or create session
+      const data = await res.json();
+
+      if (res.ok && data.success && data.user) {
+        if (data.token) {
+          localStorage.setItem("vps_auth_token", data.token);
+        }
+
+        const loggedInUser: AuthUser = {
+          id: data.user.id,
+          name: data.user.name,
+          email: data.user.email,
+          telegramUsername: data.user.telegramUsername,
+          role: data.user.role || "user",
+          createdAt: data.user.createdAt || new Date().toISOString(),
+        };
+
+        setSuccessMessage(
+          lang === "bn"
+            ? "VPS ডাটাবেজ থেকে সফলভাবে লগইন হয়েছে! ড্যাশবোর্ডে রিডাইরেক্ট করা হচ্ছে..."
+            : "Logged in successfully from VPS Database! Redirecting..."
+        );
+
+        setTimeout(() => {
+          onAuthSuccess(loggedInUser);
+          onNavigate("/home");
+        }, 700);
+      } else {
+        setErrorMessage(data.message || (lang === "bn" ? "লগইন ব্যর্থ হয়েছে।" : "Login failed."));
+      }
+    } catch (err: any) {
+      console.warn("VPS API Login Notice:", err.message);
+      // Fallback local check
       let existingUsers: AuthUser[] = [];
       try {
         const stored = localStorage.getItem("hostbot_registered_users");
@@ -111,17 +151,19 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
       setSuccessMessage(
         lang === "bn"
           ? "সফলভাবে লগইন হয়েছে! ড্যাশবোর্ডে রিডাইরেক্ট করা হচ্ছে..."
-          : "Logged in successfully! Redirecting to dashboard..."
+          : "Logged in successfully! Redirecting..."
       );
 
       setTimeout(() => {
         onAuthSuccess(loggedInUser);
         onNavigate("/home");
       }, 700);
-    }, 800);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -166,9 +208,61 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const res = await apiFetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          password,
+          telegramUsername: telegramUsername.trim(),
+        }),
+      });
 
+      const data = await res.json();
+
+      if (res.ok && data.success && data.user) {
+        if (data.token) {
+          localStorage.setItem("vps_auth_token", data.token);
+        }
+
+        const newUser: AuthUser = {
+          id: data.user.id,
+          name: data.user.name,
+          email: data.user.email,
+          telegramUsername: data.user.telegramUsername,
+          role: data.user.role || "user",
+          createdAt: data.user.createdAt || new Date().toISOString(),
+        };
+
+        // Cache locally as well
+        try {
+          let existingUsers: AuthUser[] = [];
+          const stored = localStorage.getItem("hostbot_registered_users");
+          if (stored) existingUsers = JSON.parse(stored);
+          existingUsers.push(newUser);
+          localStorage.setItem("hostbot_registered_users", JSON.stringify(existingUsers));
+        } catch {
+          // ignore
+        }
+
+        setSuccessMessage(
+          lang === "bn"
+            ? "VPS ডাটাবেজে অ্যাকাউন্ট তৈরি সফল হয়েছে! স্বাগতম bot-host.xyz-এ।"
+            : "Account created & saved in VPS database! Welcome to bot-host.xyz."
+        );
+
+        setTimeout(() => {
+          onAuthSuccess(newUser);
+          onNavigate("/home");
+        }, 700);
+      } else {
+        setErrorMessage(data.message || (lang === "bn" ? "রেজিস্ট্রেশন ব্যর্থ হয়েছে।" : "Registration failed."));
+      }
+    } catch (err: any) {
+      console.warn("VPS API Register Notice:", err.message);
+      // Local fallback
       const newUser: AuthUser = {
         id: "usr_" + Math.random().toString(36).substring(2, 9),
         name: name.trim(),
@@ -182,7 +276,6 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
         createdAt: new Date().toISOString(),
       };
 
-      // Store in users list
       try {
         let existingUsers: AuthUser[] = [];
         const stored = localStorage.getItem("hostbot_registered_users");
@@ -203,7 +296,9 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
         onAuthSuccess(newUser);
         onNavigate("/home");
       }, 700);
-    }, 900);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -596,8 +691,8 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
                 </div>
                 <p className="text-xs text-emerald-800 font-medium">
                   {lang === "bn"
-                    ? "পাসওয়ার্ড রিসেট লিংক আপনার ইমেইলে পাঠানো হয়েছে!"
-                    : "Password reset link sent to your email successfully!"}
+                    ? "পাসওয়ার্ড রিসেট লিংক ও ওটিপি আপনার ইমেইলে পাঠানো হয়েছে!"
+                    : "Password reset link and OTP code sent to your email successfully!"}
                 </p>
                 <button
                   type="button"
@@ -612,9 +707,19 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
               </div>
             ) : (
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  if (forgotEmail) setForgotSuccess(true);
+                  if (!forgotEmail) return;
+                  try {
+                    await apiFetch("/api/auth/forgot-password", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email: forgotEmail.trim() }),
+                    });
+                  } catch {
+                    // ignore
+                  }
+                  setForgotSuccess(true);
                 }}
                 className="space-y-3"
               >

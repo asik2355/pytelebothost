@@ -11,6 +11,7 @@ import { ServerDetailView } from "./components/ServerDetailView";
 import { ServerControlPanelView } from "./components/ServerControlPanelView";
 import { AuthPageView } from "./components/AuthPageView";
 import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification, ActiveServer, AuthUser } from "./types";
+import { apiFetch } from "./lib/api";
 
 export default function App() {
   const [lang, setLang] = useState<"bn" | "en">("en");
@@ -137,6 +138,34 @@ export default function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
+  // Validate session with VPS Database on initial mount
+  useEffect(() => {
+    const token = localStorage.getItem("vps_auth_token");
+    if (!token) return;
+
+    apiFetch("/api/auth/me", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.success && data.user) {
+          setCurrentUser((prev) => ({
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            telegramUsername: data.user.telegramUsername,
+            role: data.user.role || "user",
+            createdAt: data.user.createdAt || (prev?.createdAt || new Date().toISOString()),
+          }));
+        }
+      })
+      .catch(() => {
+        // network or server startup notice
+      });
+  }, []);
+
   const handleAuthSuccess = useCallback((user: AuthUser) => {
     setCurrentUser(user);
     try {
@@ -161,6 +190,7 @@ export default function App() {
     setCurrentUser(null);
     try {
       localStorage.removeItem("hostbot_auth_user");
+      localStorage.removeItem("vps_auth_token");
     } catch {
       // ignore
     }

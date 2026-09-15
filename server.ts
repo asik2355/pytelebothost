@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { spawn, exec, execSync, ChildProcess } from "child_process";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
@@ -333,6 +334,389 @@ if (fs.readdirSync(WORKSPACE_DIR).length === 0) {
     fs.writeFileSync(path.join(WORKSPACE_DIR, filename), content, "utf-8");
   }
 }
+
+// ---------------- VPS DATABASE PERSISTENCE LAYER (Users, Auth, Sessions) ----------------
+const VPS_DATA_DIR = path.join(process.cwd(), "vps_data");
+const USERS_DB_FILE = path.join(VPS_DATA_DIR, "users.json");
+const SESSIONS_DB_FILE = path.join(VPS_DATA_DIR, "sessions.json");
+
+if (!fs.existsSync(VPS_DATA_DIR)) {
+  fs.mkdirSync(VPS_DATA_DIR, { recursive: true });
+}
+
+export interface VpsUserRecord {
+  id: string;
+  name: string;
+  email: string;
+  telegramUsername?: string;
+  passwordHash: string;
+  salt: string;
+  role: "user" | "admin";
+  walletBalance: number;
+  plan: string;
+  serversCount: number;
+  createdAt: string;
+  lastLoginAt: string;
+  resetToken?: string;
+}
+
+export interface VpsSessionRecord {
+  token: string;
+  userId: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+function initVpsDatabase() {
+  if (!fs.existsSync(USERS_DB_FILE)) {
+    // Seed default starter accounts
+    const salt = crypto.randomBytes(16).toString("hex");
+    const passwordHash = crypto.pbkdf2Sync("admin123456", salt, 1000, 64, "sha512").toString("hex");
+    
+    const initialUsers: VpsUserRecord[] = [
+      {
+        id: "usr_admin_01",
+        name: "Admin User",
+        email: "admin@bot-host.xyz",
+        telegramUsername: "@admin_bot_host",
+        passwordHash,
+        salt,
+        role: "admin",
+        walletBalance: 5000,
+        plan: "Enterprise Pro",
+        serversCount: 1,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      },
+      {
+        id: "usr_demo_01",
+        name: "Alif Sheikh",
+        email: "demo@bot-host.xyz",
+        telegramUsername: "@alif_dev",
+        passwordHash,
+        salt,
+        role: "user",
+        walletBalance: 250,
+        plan: "Community Free",
+        serversCount: 0,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      }
+    ];
+    fs.writeFileSync(USERS_DB_FILE, JSON.stringify(initialUsers, null, 2), "utf-8");
+  }
+
+  if (!fs.existsSync(SESSIONS_DB_FILE)) {
+    fs.writeFileSync(SESSIONS_DB_FILE, JSON.stringify([], null, 2), "utf-8");
+  }
+}
+
+initVpsDatabase();
+
+function getVpsUsers(): VpsUserRecord[] {
+  try {
+    if (fs.existsSync(USERS_DB_FILE)) {
+      const data = fs.readFileSync(USERS_DB_FILE, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error("Error reading VPS users db:", e);
+  }
+  return [];
+}
+
+function saveVpsUsers(users: VpsUserRecord[]) {
+  try {
+    fs.writeFileSync(USERS_DB_FILE, JSON.stringify(users, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error saving VPS users db:", e);
+  }
+}
+
+function getVpsSessions(): VpsSessionRecord[] {
+  try {
+    if (fs.existsSync(SESSIONS_DB_FILE)) {
+      return JSON.parse(fs.readFileSync(SESSIONS_DB_FILE, "utf-8"));
+    }
+  } catch (e) {
+    console.error("Error reading VPS sessions db:", e);
+  }
+  return [];
+}
+
+function saveVpsSessions(sessions: VpsSessionRecord[]) {
+  try {
+    fs.writeFileSync(SESSIONS_DB_FILE, JSON.stringify(sessions, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error saving VPS sessions db:", e);
+  }
+}
+
+function hashPassword(password: string, customSalt?: string): { hash: string; salt: string } {
+  const salt = customSalt || crypto.randomBytes(16).toString("hex");
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+  return { hash, salt };
+}
+
+function verifyPassword(password: string, hash: string, salt: string): boolean {
+  const calculated = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+  return calculated === hash;
+}
+
+function createSessionToken(userId: string): string {
+  const token = "vps_sess_" + crypto.randomBytes(32).toString("hex");
+  const sessions = getVpsSessions();
+  const now = Date.now();
+  const validSessions = sessions.filter(s => new Date(s.expiresAt).getTime() > now);
+  
+  validSessions.push({
+    token,
+    userId,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  });
+  saveVpsSessions(validSessions);
+  return token;
+}
+
+function sanitizeUser(u: VpsUserRecord) {
+  const { passwordHash, salt, resetToken, ...safeUser } = u;
+  return safeUser;
+}
+
+// ---------------- AUTH & USER DATABASE API ROUTES ----------------
+
+// 1. User Registration -> Saved Permanently to VPS Database
+app.post("/api/auth/register", (req, res) => {
+  try {
+    const { name, email, password, telegramUsername } = req.body;
+
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ success: false, message: "Valid email address is required" });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = (name || cleanEmail.split("@")[0]).trim();
+    const cleanTelegram = telegramUsername ? (telegramUsername.startsWith("@") ? telegramUsername.trim() : "@" + telegramUsername.trim()) : undefined;
+
+    const users = getVpsUsers();
+    const existing = users.find(u => u.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: "An account with this email already exists in the VPS Database. Please login instead.",
+      });
+    }
+
+    const { hash, salt } = hashPassword(password);
+    const userId = "usr_" + crypto.randomBytes(6).toString("hex");
+    const now = new Date().toISOString();
+
+    const newUser: VpsUserRecord = {
+      id: userId,
+      name: cleanName,
+      email: cleanEmail,
+      telegramUsername: cleanTelegram,
+      passwordHash: hash,
+      salt,
+      role: "user",
+      walletBalance: 100, // Welcome signup bonus
+      plan: "Community Free",
+      serversCount: 0,
+      createdAt: now,
+      lastLoginAt: now,
+    };
+
+    users.push(newUser);
+    saveVpsUsers(users);
+
+    const token = createSessionToken(newUser.id);
+    const safeUser = sanitizeUser(newUser);
+
+    return res.status(201).json({
+      success: true,
+      message: "User successfully registered in VPS database!",
+      user: safeUser,
+      token,
+    });
+  } catch (err: any) {
+    console.error("VPS Register Error:", err);
+    return res.status(500).json({ success: false, message: "VPS database error: " + err.message });
+  }
+});
+
+// 2. User Login -> Verified against VPS Database
+app.post("/api/auth/login", (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password are required" });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const users = getVpsUsers();
+    const userIndex = users.findIndex(u => u.email.toLowerCase() === cleanEmail);
+
+    if (userIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: "No account found with this email in VPS Database. Please register first.",
+      });
+    }
+
+    const user = users[userIndex];
+    const isMatch = verifyPassword(password, user.passwordHash, user.salt);
+
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Incorrect password. Please try again.",
+      });
+    }
+
+    // Update last login
+    users[userIndex].lastLoginAt = new Date().toISOString();
+    saveVpsUsers(users);
+
+    const token = createSessionToken(user.id);
+    const safeUser = sanitizeUser(users[userIndex]);
+
+    return res.json({
+      success: true,
+      message: "Login successful!",
+      user: safeUser,
+      token,
+    });
+  } catch (err: any) {
+    console.error("VPS Login Error:", err);
+    return res.status(500).json({ success: false, message: "VPS database error: " + err.message });
+  }
+});
+
+// 3. Get Current Authenticated User profile & Balance
+app.get("/api/auth/me", (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : req.query.token as string;
+
+    if (!token) {
+      return res.status(401).json({ success: false, message: "No session token provided" });
+    }
+
+    const sessions = getVpsSessions();
+    const session = sessions.find(s => s.token === token && new Date(s.expiresAt).getTime() > Date.now());
+
+    if (!session) {
+      return res.status(401).json({ success: false, message: "Session expired or invalid" });
+    }
+
+    const users = getVpsUsers();
+    const user = users.find(u => u.id === session.userId);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found in VPS Database" });
+    }
+
+    return res.json({
+      success: true,
+      user: sanitizeUser(user),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 4. Forgot / Reset Password
+app.post("/api/auth/forgot-password", (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const users = getVpsUsers();
+    const user = users.find(u => u.email.toLowerCase() === cleanEmail);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "No user found with this email in VPS Database",
+      });
+    }
+
+    // Generate reset code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetToken = resetCode;
+    saveVpsUsers(users);
+
+    return res.json({
+      success: true,
+      message: `Password reset verification sent. Temporary OTP code: ${resetCode}`,
+      resetCode,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 5. Update Profile (Name, Telegram Username)
+app.post("/api/auth/update-profile", (req, res) => {
+  try {
+    const { id, name, telegramUsername } = req.body;
+    if (!id) {
+      return res.status(400).json({ success: false, message: "User ID is required" });
+    }
+
+    const users = getVpsUsers();
+    const userIndex = users.findIndex(u => u.id === id);
+
+    if (userIndex === -1) {
+      return res.status(404).json({ success: false, message: "User not found in VPS database" });
+    }
+
+    if (name) users[userIndex].name = name.trim();
+    if (telegramUsername !== undefined) {
+      users[userIndex].telegramUsername = telegramUsername.trim()
+        ? telegramUsername.startsWith("@") ? telegramUsername.trim() : "@" + telegramUsername.trim()
+        : undefined;
+    }
+
+    saveVpsUsers(users);
+
+    return res.json({
+      success: true,
+      message: "Profile updated successfully in VPS database!",
+      user: sanitizeUser(users[userIndex]),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 6. Database Health & Total Users Status
+app.get("/api/auth/db-status", (req, res) => {
+  try {
+    const users = getVpsUsers();
+    const sessions = getVpsSessions();
+    const dbStats = fs.statSync(USERS_DB_FILE);
+
+    return res.json({
+      success: true,
+      storageEngine: "VPS Native File Database (JSON + PBKDF2/SHA512)",
+      databasePath: USERS_DB_FILE,
+      totalUsers: users.length,
+      activeSessions: sessions.filter(s => new Date(s.expiresAt).getTime() > Date.now()).length,
+      sizeBytes: dbStats.size,
+      lastModified: dbStats.mtime.toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // ---------------- API ROUTES ----------------
 

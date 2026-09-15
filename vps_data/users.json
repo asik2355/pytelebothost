@@ -1,0 +1,44 @@
+[
+  {
+    "id": "usr_admin_01",
+    "name": "Admin User",
+    "email": "admin@bot-host.xyz",
+    "telegramUsername": "@admin_bot_host",
+    "passwordHash": "05330d962f33fcb27b5e58932b82c727a8b1804fa6dbb6aea38136924b034d29c78fdd7aa8c2d7e99a3d6222902a01b433da0ae92ae06aa8a364f5275e684059",
+    "salt": "d080c10d8756d5047155d6729a7e6302",
+    "role": "admin",
+    "walletBalance": 5000,
+    "plan": "Enterprise Pro",
+    "serversCount": 1,
+    "createdAt": "2026-09-15T06:22:38.729Z",
+    "lastLoginAt": "2026-09-15T06:22:38.729Z"
+  },
+  {
+    "id": "usr_demo_01",
+    "name": "Alif Sheikh",
+    "email": "demo@bot-host.xyz",
+    "telegramUsername": "@alif_dev",
+    "passwordHash": "05330d962f33fcb27b5e58932b82c727a8b1804fa6dbb6aea38136924b034d29c78fdd7aa8c2d7e99a3d6222902a01b433da0ae92ae06aa8a364f5275e684059",
+    "salt": "d080c10d8756d5047155d6729a7e6302",
+    "role": "user",
+    "walletBalance": 250,
+    "plan": "Community Free",
+    "serversCount": 0,
+    "createdAt": "2026-09-15T06:22:38.729Z",
+    "lastLoginAt": "2026-09-15T06:22:38.729Z"
+  },
+  {
+    "id": "usr_f54f0dd1bf02",
+    "name": "Test User",
+    "email": "test@example.com",
+    "telegramUsername": "@testuser",
+    "passwordHash": "c597c8b3d62eb08716eebe750f62ee1278e71b199a9c0c38c849aead8c70ee4a9ab93a5f968b21f8bfaf35210db45d41766d3d80b45d4a1b47daa4f9105dc7b3",
+    "salt": "d84c6f54d521c64cfe7583bbb3170ad3",
+    "role": "user",
+    "walletBalance": 100,
+    "plan": "Community Free",
+    "serversCount": 0,
+    "createdAt": "2026-09-15T06:22:40.081Z",
+    "lastLoginAt": "2026-09-15T06:22:45.203Z"
+  }
+]
