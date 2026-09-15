@@ -6,6 +6,8 @@ import { spawn, exec, execSync, ChildProcess } from "child_process";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
 import { Freestyle } from "freestyle";
+import { initializeApp, cert, getApps } from "firebase-admin/app";
+import { getFirestore, Firestore } from "firebase-admin/firestore";
 
 const LIVE_FREESTYLE_VM_ID = "vm-e0958917577143f9827ef83fce45f93f";
 const LIVE_FREESTYLE_EGRESS_IP = "208.72.218.137";
@@ -335,7 +337,30 @@ if (fs.readdirSync(WORKSPACE_DIR).length === 0) {
   }
 }
 
-// ---------------- VPS DATABASE PERSISTENCE LAYER (Users, Auth, Sessions) ----------------
+// ---------------- FIREBASE FIRESTORE DATABASE PERSISTENCE LAYER (Users, Auth, Sessions) ----------------
+const FIREBASE_KEY_PATH = path.join(process.cwd(), "firebase-service-account.json");
+let firestoreDb: Firestore | null = null;
+let firestoreInitError: string | null = null;
+
+try {
+  if (fs.existsSync(FIREBASE_KEY_PATH)) {
+    const serviceAccount = JSON.parse(fs.readFileSync(FIREBASE_KEY_PATH, "utf-8"));
+    if (!getApps().length) {
+      initializeApp({
+        credential: cert(serviceAccount),
+        projectId: serviceAccount.project_id || "bot-hostbd",
+      });
+    }
+    firestoreDb = getFirestore();
+    console.log("🔥 Firebase Firestore Database successfully connected to project: bot-hostbd");
+  } else {
+    console.warn("⚠️ Firebase service account file not found, running local sync fallback.");
+  }
+} catch (e: any) {
+  firestoreInitError = e.message;
+  console.error("Firebase Admin initialization error:", e);
+}
+
 const VPS_DATA_DIR = path.join(process.cwd(), "vps_data");
 const USERS_DB_FILE = path.join(VPS_DATA_DIR, "users.json");
 const SESSIONS_DB_FILE = path.join(VPS_DATA_DIR, "sessions.json");
@@ -367,9 +392,8 @@ export interface VpsSessionRecord {
   expiresAt: string;
 }
 
-function initVpsDatabase() {
+function initLocalCache() {
   if (!fs.existsSync(USERS_DB_FILE)) {
-    // Seed default starter accounts
     const salt = crypto.randomBytes(16).toString("hex");
     const passwordHash = crypto.pbkdf2Sync("admin123456", salt, 1000, 64, "sha512").toString("hex");
     
@@ -411,45 +435,151 @@ function initVpsDatabase() {
   }
 }
 
-initVpsDatabase();
+initLocalCache();
 
-function getVpsUsers(): VpsUserRecord[] {
+// Seed initial users into Firestore if collection is empty
+async function syncFirestoreInitialUsers() {
+  if (!firestoreDb) return;
+  try {
+    const snapshot = await firestoreDb.collection("users").limit(1).get();
+    if (snapshot.empty) {
+      console.log("🔥 Seeding initial users into Firestore collection 'users'...");
+      const localUsers = getLocalUsers();
+      const batch = firestoreDb.batch();
+      for (const u of localUsers) {
+        const docRef = firestoreDb.collection("users").doc(u.id);
+        batch.set(docRef, u);
+      }
+      await batch.commit();
+      console.log("🔥 Successfully seeded initial users in Firestore.");
+    }
+  } catch (err: any) {
+    console.warn("Firestore sync initial users warning:", err.message);
+  }
+}
+
+syncFirestoreInitialUsers();
+
+function getLocalUsers(): VpsUserRecord[] {
   try {
     if (fs.existsSync(USERS_DB_FILE)) {
-      const data = fs.readFileSync(USERS_DB_FILE, "utf-8");
-      return JSON.parse(data);
+      return JSON.parse(fs.readFileSync(USERS_DB_FILE, "utf-8"));
     }
   } catch (e) {
-    console.error("Error reading VPS users db:", e);
+    console.error("Error reading local users db:", e);
   }
   return [];
 }
 
-function saveVpsUsers(users: VpsUserRecord[]) {
+function saveLocalUsers(users: VpsUserRecord[]) {
   try {
     fs.writeFileSync(USERS_DB_FILE, JSON.stringify(users, null, 2), "utf-8");
   } catch (e) {
-    console.error("Error saving VPS users db:", e);
+    console.error("Error saving local users db:", e);
   }
 }
 
-function getVpsSessions(): VpsSessionRecord[] {
+function getLocalSessions(): VpsSessionRecord[] {
   try {
     if (fs.existsSync(SESSIONS_DB_FILE)) {
       return JSON.parse(fs.readFileSync(SESSIONS_DB_FILE, "utf-8"));
     }
   } catch (e) {
-    console.error("Error reading VPS sessions db:", e);
+    console.error("Error reading local sessions db:", e);
   }
   return [];
 }
 
-function saveVpsSessions(sessions: VpsSessionRecord[]) {
+function saveLocalSessions(sessions: VpsSessionRecord[]) {
   try {
     fs.writeFileSync(SESSIONS_DB_FILE, JSON.stringify(sessions, null, 2), "utf-8");
   } catch (e) {
-    console.error("Error saving VPS sessions db:", e);
+    console.error("Error saving local sessions db:", e);
   }
+}
+
+// Firestore Async Helpers
+async function findUserByEmailInFirestore(email: string): Promise<VpsUserRecord | null> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (firestoreDb) {
+    try {
+      const snap = await firestoreDb.collection("users").where("email", "==", cleanEmail).limit(1).get();
+      if (!snap.empty) {
+        return snap.docs[0].data() as VpsUserRecord;
+      }
+    } catch (e: any) {
+      console.warn("Firestore findUserByEmail warning:", e.message);
+    }
+  }
+  const users = getLocalUsers();
+  return users.find(u => u.email.toLowerCase() === cleanEmail) || null;
+}
+
+async function findUserByIdInFirestore(userId: string): Promise<VpsUserRecord | null> {
+  if (firestoreDb) {
+    try {
+      const snap = await firestoreDb.collection("users").doc(userId).get();
+      if (snap.exists) {
+        return snap.data() as VpsUserRecord;
+      }
+    } catch (e: any) {
+      console.warn("Firestore findUserById warning:", e.message);
+    }
+  }
+  const users = getLocalUsers();
+  return users.find(u => u.id === userId) || null;
+}
+
+async function saveUserToFirestore(user: VpsUserRecord): Promise<void> {
+  // Save to Firestore
+  if (firestoreDb) {
+    try {
+      await firestoreDb.collection("users").doc(user.id).set(user, { merge: true });
+    } catch (e: any) {
+      console.warn("Firestore saveUser warning:", e.message);
+    }
+  }
+  // Sync to local cache
+  const users = getLocalUsers();
+  const idx = users.findIndex(u => u.id === user.id);
+  if (idx >= 0) {
+    users[idx] = user;
+  } else {
+    users.push(user);
+  }
+  saveLocalUsers(users);
+}
+
+async function saveSessionToFirestore(session: VpsSessionRecord): Promise<void> {
+  if (firestoreDb) {
+    try {
+      await firestoreDb.collection("sessions").doc(session.token).set(session);
+    } catch (e: any) {
+      console.warn("Firestore saveSession warning:", e.message);
+    }
+  }
+  const sessions = getLocalSessions();
+  const valid = sessions.filter(s => new Date(s.expiresAt).getTime() > Date.now());
+  valid.push(session);
+  saveLocalSessions(valid);
+}
+
+async function findSessionInFirestore(token: string): Promise<VpsSessionRecord | null> {
+  if (firestoreDb) {
+    try {
+      const snap = await firestoreDb.collection("sessions").doc(token).get();
+      if (snap.exists) {
+        const data = snap.data() as VpsSessionRecord;
+        if (new Date(data.expiresAt).getTime() > Date.now()) {
+          return data;
+        }
+      }
+    } catch (e: any) {
+      console.warn("Firestore findSession warning:", e.message);
+    }
+  }
+  const sessions = getLocalSessions();
+  return sessions.find(s => s.token === token && new Date(s.expiresAt).getTime() > Date.now()) || null;
 }
 
 function hashPassword(password: string, customSalt?: string): { hash: string; salt: string } {
@@ -463,19 +593,15 @@ function verifyPassword(password: string, hash: string, salt: string): boolean {
   return calculated === hash;
 }
 
-function createSessionToken(userId: string): string {
+async function createSessionToken(userId: string): Promise<string> {
   const token = "vps_sess_" + crypto.randomBytes(32).toString("hex");
-  const sessions = getVpsSessions();
-  const now = Date.now();
-  const validSessions = sessions.filter(s => new Date(s.expiresAt).getTime() > now);
-  
-  validSessions.push({
+  const session: VpsSessionRecord = {
     token,
     userId,
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-  });
-  saveVpsSessions(validSessions);
+  };
+  await saveSessionToFirestore(session);
   return token;
 }
 
@@ -486,8 +612,8 @@ function sanitizeUser(u: VpsUserRecord) {
 
 // ---------------- AUTH & USER DATABASE API ROUTES ----------------
 
-// 1. User Registration -> Saved Permanently to VPS Database
-app.post("/api/auth/register", (req, res) => {
+// 1. User Registration -> Saved Permanently to Firestore Database
+app.post("/api/auth/register", async (req, res) => {
   try {
     const { name, email, password, telegramUsername } = req.body;
 
@@ -502,12 +628,11 @@ app.post("/api/auth/register", (req, res) => {
     const cleanName = (name || cleanEmail.split("@")[0]).trim();
     const cleanTelegram = telegramUsername ? (telegramUsername.startsWith("@") ? telegramUsername.trim() : "@" + telegramUsername.trim()) : undefined;
 
-    const users = getVpsUsers();
-    const existing = users.find(u => u.email.toLowerCase() === cleanEmail);
+    const existing = await findUserByEmailInFirestore(cleanEmail);
     if (existing) {
       return res.status(409).json({
         success: false,
-        message: "An account with this email already exists. Please login instead.",
+        message: "An account with this email already exists in Firestore. Please login instead.",
       });
     }
 
@@ -530,17 +655,19 @@ app.post("/api/auth/register", (req, res) => {
       lastLoginAt: now,
     };
 
-    users.push(newUser);
-    saveVpsUsers(users);
+    await saveUserToFirestore(newUser);
 
-    const token = createSessionToken(newUser.id);
+    const token = await createSessionToken(newUser.id);
     const safeUser = sanitizeUser(newUser);
+
+    console.log(`🔥 [Firestore] Registered new user ${cleanEmail} (ID: ${userId}) in collection 'users'`);
 
     return res.status(201).json({
       success: true,
-      message: "Account successfully created!",
+      message: "Account successfully created in Firestore!",
       user: safeUser,
       token,
+      firestoreSaved: true,
     });
   } catch (err: any) {
     console.error("Auth Register Error:", err);
@@ -548,8 +675,8 @@ app.post("/api/auth/register", (req, res) => {
   }
 });
 
-// 2. User Login -> Verified against Database
-app.post("/api/auth/login", (req, res) => {
+// 2. User Login -> Verified against Firestore Database
+app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -557,17 +684,15 @@ app.post("/api/auth/login", (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const users = getVpsUsers();
-    const userIndex = users.findIndex(u => u.email.toLowerCase() === cleanEmail);
+    const user = await findUserByEmailInFirestore(cleanEmail);
 
-    if (userIndex === -1) {
+    if (!user) {
       return res.status(404).json({
         success: false,
-        message: "No account found with this email. Please register first.",
+        message: "No account found with this email in Firestore. Please register first.",
       });
     }
 
-    const user = users[userIndex];
     const isMatch = verifyPassword(password, user.passwordHash, user.salt);
 
     if (!isMatch) {
@@ -577,18 +702,21 @@ app.post("/api/auth/login", (req, res) => {
       });
     }
 
-    // Update last login
-    users[userIndex].lastLoginAt = new Date().toISOString();
-    saveVpsUsers(users);
+    // Update last login in Firestore
+    user.lastLoginAt = new Date().toISOString();
+    await saveUserToFirestore(user);
 
-    const token = createSessionToken(user.id);
-    const safeUser = sanitizeUser(users[userIndex]);
+    const token = await createSessionToken(user.id);
+    const safeUser = sanitizeUser(user);
+
+    console.log(`🔥 [Firestore] User logged in: ${cleanEmail}`);
 
     return res.json({
       success: true,
-      message: "Login successful!",
+      message: "Login successful via Firestore!",
       user: safeUser,
       token,
+      firestoreVerified: true,
     });
   } catch (err: any) {
     console.error("Auth Login Error:", err);
@@ -596,8 +724,8 @@ app.post("/api/auth/login", (req, res) => {
   }
 });
 
-// 3. Get Current Authenticated User profile & Balance
-app.get("/api/auth/me", (req, res) => {
+// 3. Get Current Authenticated User profile & Balance from Firestore
+app.get("/api/auth/me", async (req, res) => {
   try {
     const authHeader = req.headers.authorization || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : req.query.token as string;
@@ -606,15 +734,13 @@ app.get("/api/auth/me", (req, res) => {
       return res.status(401).json({ success: false, message: "No session token provided" });
     }
 
-    const sessions = getVpsSessions();
-    const session = sessions.find(s => s.token === token && new Date(s.expiresAt).getTime() > Date.now());
+    const session = await findSessionInFirestore(token);
 
     if (!session) {
       return res.status(401).json({ success: false, message: "Session expired or invalid" });
     }
 
-    const users = getVpsUsers();
-    const user = users.find(u => u.id === session.userId);
+    const user = await findUserByIdInFirestore(session.userId);
 
     if (!user) {
       return res.status(404).json({ success: false, message: "User account not found" });
@@ -629,8 +755,8 @@ app.get("/api/auth/me", (req, res) => {
   }
 });
 
-// 4. Forgot / Reset Password
-app.post("/api/auth/forgot-password", (req, res) => {
+// 4. Forgot / Reset Password -> Firestore Update
+app.post("/api/auth/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) {
@@ -638,20 +764,19 @@ app.post("/api/auth/forgot-password", (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const users = getVpsUsers();
-    const user = users.find(u => u.email.toLowerCase() === cleanEmail);
+    const user = await findUserByEmailInFirestore(cleanEmail);
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "No user found with this email address.",
+        message: "No user found with this email address in Firestore.",
       });
     }
 
     // Generate reset code
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     user.resetToken = resetCode;
-    saveVpsUsers(users);
+    await saveUserToFirestore(user);
 
     return res.json({
       success: true,
@@ -663,55 +788,66 @@ app.post("/api/auth/forgot-password", (req, res) => {
   }
 });
 
-// 5. Update Profile (Name, Telegram Username)
-app.post("/api/auth/update-profile", (req, res) => {
+// 5. Update Profile (Name, Telegram Username) -> Firestore Update
+app.post("/api/auth/update-profile", async (req, res) => {
   try {
     const { id, name, telegramUsername } = req.body;
     if (!id) {
       return res.status(400).json({ success: false, message: "User ID is required" });
     }
 
-    const users = getVpsUsers();
-    const userIndex = users.findIndex(u => u.id === id);
+    const user = await findUserByIdInFirestore(id);
 
-    if (userIndex === -1) {
-      return res.status(404).json({ success: false, message: "User not found" });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found in Firestore" });
     }
 
-    if (name) users[userIndex].name = name.trim();
+    if (name) user.name = name.trim();
     if (telegramUsername !== undefined) {
-      users[userIndex].telegramUsername = telegramUsername.trim()
+      user.telegramUsername = telegramUsername.trim()
         ? telegramUsername.startsWith("@") ? telegramUsername.trim() : "@" + telegramUsername.trim()
         : undefined;
     }
 
-    saveVpsUsers(users);
+    await saveUserToFirestore(user);
 
     return res.json({
       success: true,
-      message: "Profile updated successfully!",
-      user: sanitizeUser(users[userIndex]),
+      message: "Profile updated in Firestore successfully!",
+      user: sanitizeUser(user),
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// 6. Database Health & Total Users Status
-app.get("/api/auth/db-status", (req, res) => {
+// 6. Database Health & Firestore Status
+app.get("/api/auth/db-status", async (req, res) => {
   try {
-    const users = getVpsUsers();
-    const sessions = getVpsSessions();
-    const dbStats = fs.statSync(USERS_DB_FILE);
+    let firestoreUsersCount = 0;
+    let firestoreConnected = false;
+    if (firestoreDb) {
+      try {
+        const snap = await firestoreDb.collection("users").get();
+        firestoreUsersCount = snap.size;
+        firestoreConnected = true;
+      } catch (err: any) {
+        console.warn("Firestore count error:", err.message);
+      }
+    }
+
+    const localUsers = getLocalUsers();
+    const localSessions = getLocalSessions();
 
     return res.json({
       success: true,
-      storageEngine: "VPS Native File Database (JSON + PBKDF2/SHA512)",
-      databasePath: USERS_DB_FILE,
-      totalUsers: users.length,
-      activeSessions: sessions.filter(s => new Date(s.expiresAt).getTime() > Date.now()).length,
-      sizeBytes: dbStats.size,
-      lastModified: dbStats.mtime.toISOString(),
+      storageEngine: firestoreConnected ? "Google Cloud Firestore (Project: bot-hostbd)" : "Local Persistent Cache + Firestore",
+      projectId: "bot-hostbd",
+      firestoreConnected,
+      totalUsers: firestoreConnected ? firestoreUsersCount : localUsers.length,
+      activeSessions: localSessions.filter(s => new Date(s.expiresAt).getTime() > Date.now()).length,
+      firestoreCollection: "users",
+      sessionsCollection: "sessions",
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });

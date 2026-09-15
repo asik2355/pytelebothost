@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with authentication and wallet details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user ID" },
+        "name": { "type": "string", "description": "User display name", "maxLength": 100 },
+        "email": { "type": "string", "description": "User email address", "maxLength": 200 },
+        "telegramUsername": { "type": "string", "description": "Optional Telegram username", "maxLength": 100 },
+        "passwordHash": { "type": "string", "description": "PBKDF2 SHA512 password hash" },
+        "salt": { "type": "string", "description": "Cryptographic salt" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User authorization role" },
+        "walletBalance": { "type": "number", "description": "User balance in BDT" },
+        "plan": { "type": "string", "description": "Active subscription plan name" },
+        "serversCount": { "type": "number", "description": "Count of active servers" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "lastLoginAt": { "type": "string", "format": "date-time", "description": "Last login timestamp" },
+        "resetToken": { "type": "string", "description": "Optional password reset token" }
+      },
+      "required": ["id", "name", "email", "passwordHash", "salt", "role", "walletBalance", "createdAt"]
+    },
+    "Session": {
+      "title": "Session",
+      "description": "User login session token",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string", "description": "Unique session token" },
+        "userId": { "type": "string", "description": "Associated user ID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Session creation timestamp" },
+        "expiresAt": { "type": "string", "format": "date-time", "description": "Session expiration timestamp" }
+      },
+      "required": ["token", "userId", "createdAt", "expiresAt"]
+    },
+    "Server": {
+      "title": "Server",
+      "description": "Bot server hosted on VPS",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique server ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "name": { "type": "string", "description": "Server name", "maxLength": 100 },
+        "category": { "type": "string", "description": "Server language category" },
+        "status": { "type": "string", "enum": ["RUNNING", "STOPPED", "ERROR", "INSTALLING"], "description": "Server runtime status" },
+        "planName": { "type": "string", "description": "Server plan tier" },
+        "port": { "type": "number", "description": "Allocated port number" },
+        "ip": { "type": "string", "description": "Server IP address" },
+        "startupCommand": { "type": "string", "description": "Entry point execution command" },
+        "ramUsage": { "type": "string", "description": "RAM allocation" },
+        "cpuUsage": { "type": "string", "description": "CPU allocation" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation date" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update date" }
+      },
+      "required": ["id", "name", "category", "status", "port"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User account documents stored in Firestore"
+    },
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/Session" },
+      "description": "User session tokens stored in Firestore"
+    },
+    "/servers/{serverId}": {
+      "schema": { "$ref": "#/entities/Server" },
+      "description": "Hosted server documents stored in Firestore"
+    }
+  }
+}
