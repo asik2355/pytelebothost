@@ -1348,7 +1348,7 @@ app.get("/api/billing/wallet", async (req, res) => {
   if (userId) {
      const user = await findUserByIdInFirestore(userId);
      if (user) {
-        wallet.balance = user.walletBalance || 0;
+        wallet.balance = user.walletBalance || user.balance || 0;
      }
   }
   res.json(wallet);
@@ -1365,9 +1365,11 @@ app.post("/api/billing/recharge", async (req, res) => {
   if (userId) {
     const user = await findUserByIdInFirestore(userId);
     if (user) {
-      user.walletBalance = Math.round(((user.walletBalance || 0) + numAmount) * 100) / 100;
+      const newBalance = Math.round(((user.walletBalance || user.balance || 0) + numAmount) * 100) / 100;
+      user.walletBalance = newBalance;
+      user.balance = newBalance;
       await saveUserToFirestore(user);
-      currentBalance = user.walletBalance;
+      currentBalance = newBalance;
     } else {
       currentBalance = numAmount;
     }
@@ -1757,7 +1759,7 @@ app.post("/api/servers/create", async (req, res) => {
   if (userId) {
     userObj = await findUserByIdInFirestore(userId);
     if (userObj) {
-      currentBalance = userObj.walletBalance || 0;
+      currentBalance = userObj.walletBalance || userObj.balance || 0;
     }
   } else {
     const wallet = getWalletData();
@@ -1775,9 +1777,11 @@ app.post("/api/servers/create", async (req, res) => {
   // Deduct from wallet if paid plan
   if (numPrice > 0) {
     if (userObj) {
-      userObj.walletBalance = Math.round((currentBalance - numPrice) * 100) / 100;
+      const newBalance = Math.round((currentBalance - numPrice) * 100) / 100;
+      userObj.walletBalance = newBalance;
+      userObj.balance = newBalance;
       await saveUserToFirestore(userObj);
-      currentBalance = userObj.walletBalance;
+      currentBalance = newBalance;
     }
     
     const wallet = getWalletData(userId);

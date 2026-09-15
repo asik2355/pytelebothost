@@ -110,7 +110,10 @@ function mapToAuthUser(
     avatarUrl: firestoreData?.photoURL || firebaseUser.photoURL || undefined,
     telegramUsername: firestoreData?.telegramUsername || undefined,
     role: firestoreData?.role || "user",
-    balance: typeof firestoreData?.balance === "number" ? firestoreData.balance : (firestoreData?.walletBalance ?? 0),
+    balance: Math.max(
+      typeof firestoreData?.balance === "number" ? firestoreData.balance : 0,
+      typeof firestoreData?.walletBalance === "number" ? firestoreData.walletBalance : 0
+    ),
     createdAt: firestoreData?.createdAt || new Date().toISOString(),
     lastLoginAt: firestoreData?.lastLoginAt || new Date().toISOString(),
   };
