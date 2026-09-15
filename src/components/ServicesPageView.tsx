@@ -41,35 +41,12 @@ export const ServicesPageView: React.FC<ServicesPageViewProps> = ({
 }) => {
   const isRunning = status?.status === "running";
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
-  const [selectedPlan, setSelectedPlan] = useState<string>("free");
+  const [selectedPlan, setSelectedPlan] = useState<string>("mini-v1");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [purchasingPlan, setPurchasingPlan] = useState<PlanToPurchase | null>(null);
 
   // Hosting & Bot Subscription Plans
   const hostingPlans = [
-    {
-      id: "free",
-      name: lang === "bn" ? "ফ্রি স্টার্টার" : "Free Starter",
-      priceMonthly: "৳ 0",
-      priceYearly: "৳ 0",
-      numPriceMonthly: 0,
-      numPriceYearly: 0,
-      period: lang === "bn" ? "আজীবন ফ্রি" : "Forever Free",
-      description:
-        lang === "bn"
-          ? "নতুন ডেভেলপার ও ছোট টেলিগ্রাম বট টেস্ট ও শেখার জন্য উপযুক্ত।"
-          : "Ideal for testing, learning, and hosting lightweight Telegram bots.",
-      features: [
-        lang === "bn" ? "১টি সক্রিয় টেলিগ্রাম বট ইনস্ট্যান্স" : "1 Active Telegram Bot Instance",
-        lang === "bn" ? "৫১২ এমবি মেমোরি / ১ ভিপিসিউ" : "512 MB RAM / 1 vCPU",
-        lang === "bn" ? "লাইভ রিয়েল-টাইম টার্মিনাল লগ" : "Real-time Live Terminal Logs",
-        lang === "bn" ? "Pip প্যাকেজ ম্যানেজার এক্সেস" : "Pip Package Manager Access",
-        lang === "bn" ? "কমিউনিটি সাপোর্ট" : "Community Support",
-      ],
-      isPopular: false,
-      buttonText: lang === "bn" ? "বর্তমান সক্রিয় প্ল্যান" : "Current Active Plan",
-      isCurrent: true,
-    },
     {
       id: "mini-v1",
       name: "Mini-v1",

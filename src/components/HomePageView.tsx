@@ -433,14 +433,7 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
                   </p>
                 </div>
                 <button
-                  onClick={() => {
-                    setDeployPlan({
-                      id: "mini-v1",
-                      name: "Mini-v1",
-                      price: 100,
-                    });
-                    setIsDeployModalOpen(true);
-                  }}
+                  onClick={() => onNavigate("/services")}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#5438dc] hover:bg-[#432bc4] text-white text-xs font-semibold shadow-2xs cursor-pointer transition-all active:scale-95"
                 >
                   <Plus className="w-4 h-4" />

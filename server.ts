@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
@@ -83,6 +84,7 @@ async function syncLocalDirectoryToVm(localDir: string, remoteDir: string) {
 }
 
 const app = express();
+app.use(cors());
 const PORT = 3000;
 const WORKSPACE_DIR = path.join(process.cwd(), "bot_workspace");
 
