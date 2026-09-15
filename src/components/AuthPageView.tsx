@@ -113,8 +113,8 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
 
         setSuccessMessage(
           lang === "bn"
-            ? "VPS ডাটাবেজ থেকে সফলভাবে লগইন হয়েছে! ড্যাশবোর্ডে রিডাইরেক্ট করা হচ্ছে..."
-            : "Logged in successfully from VPS Database! Redirecting..."
+            ? "সফলভাবে লগইন হয়েছে! ড্যাশবোর্ডে রিডাইরেক্ট করা হচ্ছে..."
+            : "Logged in successfully! Redirecting..."
         );
 
         setTimeout(() => {
@@ -249,8 +249,8 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
 
         setSuccessMessage(
           lang === "bn"
-            ? "VPS ডাটাবেজে অ্যাকাউন্ট তৈরি সফল হয়েছে! স্বাগতম bot-host.xyz-এ।"
-            : "Account created & saved in VPS database! Welcome to bot-host.xyz."
+            ? "অ্যাকাউন্ট তৈরি সফল হয়েছে! স্বাগতম bot-host.xyz-এ।"
+            : "Account created successfully! Welcome to bot-host.xyz."
         );
 
         setTimeout(() => {

@@ -507,7 +507,7 @@ app.post("/api/auth/register", (req, res) => {
     if (existing) {
       return res.status(409).json({
         success: false,
-        message: "An account with this email already exists in the VPS Database. Please login instead.",
+        message: "An account with this email already exists. Please login instead.",
       });
     }
 
@@ -538,17 +538,17 @@ app.post("/api/auth/register", (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "User successfully registered in VPS database!",
+      message: "Account successfully created!",
       user: safeUser,
       token,
     });
   } catch (err: any) {
-    console.error("VPS Register Error:", err);
-    return res.status(500).json({ success: false, message: "VPS database error: " + err.message });
+    console.error("Auth Register Error:", err);
+    return res.status(500).json({ success: false, message: "Registration service error: " + err.message });
   }
 });
 
-// 2. User Login -> Verified against VPS Database
+// 2. User Login -> Verified against Database
 app.post("/api/auth/login", (req, res) => {
   try {
     const { email, password } = req.body;
@@ -563,7 +563,7 @@ app.post("/api/auth/login", (req, res) => {
     if (userIndex === -1) {
       return res.status(404).json({
         success: false,
-        message: "No account found with this email in VPS Database. Please register first.",
+        message: "No account found with this email. Please register first.",
       });
     }
 
@@ -591,8 +591,8 @@ app.post("/api/auth/login", (req, res) => {
       token,
     });
   } catch (err: any) {
-    console.error("VPS Login Error:", err);
-    return res.status(500).json({ success: false, message: "VPS database error: " + err.message });
+    console.error("Auth Login Error:", err);
+    return res.status(500).json({ success: false, message: "Login service error: " + err.message });
   }
 });
 
@@ -617,7 +617,7 @@ app.get("/api/auth/me", (req, res) => {
     const user = users.find(u => u.id === session.userId);
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found in VPS Database" });
+      return res.status(404).json({ success: false, message: "User account not found" });
     }
 
     return res.json({
@@ -644,7 +644,7 @@ app.post("/api/auth/forgot-password", (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "No user found with this email in VPS Database",
+        message: "No user found with this email address.",
       });
     }
 
@@ -675,7 +675,7 @@ app.post("/api/auth/update-profile", (req, res) => {
     const userIndex = users.findIndex(u => u.id === id);
 
     if (userIndex === -1) {
-      return res.status(404).json({ success: false, message: "User not found in VPS database" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
     if (name) users[userIndex].name = name.trim();
@@ -689,7 +689,7 @@ app.post("/api/auth/update-profile", (req, res) => {
 
     return res.json({
       success: true,
-      message: "Profile updated successfully in VPS database!",
+      message: "Profile updated successfully!",
       user: sanitizeUser(users[userIndex]),
     });
   } catch (err: any) {
