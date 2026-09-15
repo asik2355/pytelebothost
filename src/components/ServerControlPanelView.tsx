@@ -156,7 +156,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const isRunning = effectiveStatus === "RUNNING";
   const uuid = (server.region.split("•")[1] || server.id.replace(/[^a-zA-Z0-9]/g, "").slice(-8)).trim();
   const assignedPort = server.port || 25565;
-  const assignedIp = server.ip || "194.163.148.91";
+  const assignedIp = server.ip || "208.72.218.137";
 
   // Fetch per-server details & config
   const fetchServerDetails = async () => {

@@ -1360,7 +1360,7 @@ function getServerConfig(serverId: string, server: ServerRecord): ServerConfig {
     startupCommand: server.startupCommand || defaultCmd,
     envVars: server.envVars || defaultEnv,
     port: server.port || defaultPort,
-    ip: server.ip || "194.163.148.91",
+    ip: server.ip || "208.72.218.137",
     activities: [
       {
         id: `act-${Date.now()}-1`,
