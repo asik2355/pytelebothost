@@ -149,7 +149,7 @@ export const TopBanner: React.FC<TopBannerProps> = ({
           title="Host Bot Home"
         >
           {/* Official Host Bot Logo Image */}
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden shrink-0 flex items-center justify-center shadow-xs">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden shrink-0 flex items-center justify-center shadow-md shadow-sky-500/10 group-hover:scale-105 transition-transform duration-200">
             <img
               src="/logo.svg"
               alt="Host Bot Logo"

@@ -1,149 +1,203 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <!-- Premium Deep Navy / Indigo Background Gradient -->
-    <radialGradient id="cardBg" cx="50%" cy="35%" r="75%">
-      <stop offset="0%" stop-color="#0f172a" />
-      <stop offset="50%" stop-color="#090d16" />
-      <stop offset="100%" stop-color="#030712" />
+    <!-- Deepest Space Dark Backdrop with Rich Indigo Ambient -->
+    <radialGradient id="spaceCanvas" cx="50%" cy="30%" r="85%">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="35%" stop-color="#0f172a" />
+      <stop offset="75%" stop-color="#090d16" />
+      <stop offset="100%" stop-color="#02040a" />
     </radialGradient>
 
-    <!-- Outer Rim Electric Glow -->
-    <linearGradient id="rimGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+    <!-- Holographic Chamfer Rim Glow -->
+    <linearGradient id="haloBorder" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#38bdf8" />
-      <stop offset="50%" stop-color="#6366f1" />
-      <stop offset="100%" stop-color="#a855f7" />
-    </linearGradient>
-
-    <!-- Bot Head / Chassis Gradient -->
-    <linearGradient id="botChassis" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="35%" stop-color="#e2e8f0" />
-      <stop offset="100%" stop-color="#94a3b8" />
-    </linearGradient>
-
-    <!-- Visor Face Gradient (Dark OLED Screen) -->
-    <linearGradient id="visorOled" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#020617" />
-      <stop offset="100%" stop-color="#0b132b" />
-    </linearGradient>
-
-    <!-- Glowing Cyan Eyes / Screen Elements -->
-    <linearGradient id="cyanGlowEye" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#67e8f9" />
+      <stop offset="35%" stop-color="#818cf8" />
+      <stop offset="70%" stop-color="#c084fc" />
       <stop offset="100%" stop-color="#06b6d4" />
     </linearGradient>
 
-    <!-- Ear Headphones Gradient -->
-    <linearGradient id="earPod" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8" />
-      <stop offset="100%" stop-color="#2563eb" />
+    <!-- Ultra-Glossy Pearl White Helmet Chassis -->
+    <linearGradient id="pearlChassis" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="25%" stop-color="#f8fafc" />
+      <stop offset="65%" stop-color="#e2e8f0" />
+      <stop offset="100%" stop-color="#94a3b8" />
     </linearGradient>
 
-    <!-- Antenna Orb Glow -->
-    <linearGradient id="orbGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#a5f3fc" />
-      <stop offset="50%" stop-color="#38bdf8" />
+    <!-- Dark Mirror Visor (Like Apple Vision Pro / Daft Punk Glass) -->
+    <linearGradient id="mirrorGlass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#090d16" />
+      <stop offset="45%" stop-color="#030712" />
+      <stop offset="100%" stop-color="#020408" />
+    </linearGradient>
+
+    <!-- Super-Vibrant Cyan Electric Eye Gradient -->
+    <linearGradient id="electricEye" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" />
+      <stop offset="25%" stop-color="#38bdf8" />
+      <stop offset="70%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+
+    <!-- Electric Cyan Light Pulse -->
+    <linearGradient id="cyanSpark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#67e8f9" />
       <stop offset="100%" stop-color="#0284c7" />
     </linearGradient>
 
-    <!-- Filters for Neon Lighting -->
-    <filter id="neonBlur" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="8" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    <!-- Headphones Ring Metallic -->
+    <linearGradient id="headphoneRim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+
+    <!-- Filters for High-End Cinematic Glow -->
+    <filter id="hyperGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14" result="blur1" />
+      <feGaussianBlur stdDeviation="6" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur1" />
+        <feMergeNode in="blur2" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
     </filter>
 
-    <filter id="softHalo" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="16" result="blur" />
+    <filter id="ambientLight" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="28" result="softBlur" />
+      <feComposite in="SourceGraphic" in2="softBlur" operator="over" />
+    </filter>
+
+    <filter id="greenLiveGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
 
-  <!-- Base Icon Squircle (iOS App Icon Shape) -->
-  <rect width="512" height="512" rx="128" fill="url(#cardBg)" />
-  <rect x="3" y="3" width="506" height="506" rx="125" fill="none" stroke="url(#rimGlow)" stroke-width="4" opacity="0.8" />
+  <!-- ================= CANVAS BACKGROUND SQUIRCLE ================= -->
+  <rect width="512" height="512" rx="130" fill="url(#spaceCanvas)" />
+  <rect x="2.5" y="2.5" width="507" height="507" rx="127.5" fill="none" stroke="url(#haloBorder)" stroke-width="5" opacity="0.85" />
 
-  <!-- Ambient Internal Blue Halo -->
-  <circle cx="256" cy="240" r="160" fill="#38bdf8" opacity="0.16" filter="url(#softHalo)" />
-  <circle cx="256" cy="240" r="100" fill="#6366f1" opacity="0.2" filter="url(#softHalo)" />
+  <!-- Ambient Internal Cyber Halo (Gives high depth) -->
+  <circle cx="256" cy="220" r="160" fill="#4f46e5" opacity="0.3" filter="url(#ambientLight)" />
+  <circle cx="256" cy="220" r="95" fill="#38bdf8" opacity="0.25" filter="url(#ambientLight)" />
 
-  <!-- ================= TOP ANTENNA (TRANSMITTER) ================= -->
-  <!-- Signal Broadcast Arcs -->
-  <path d="M 216 76 A 46 46 0 0 0 216 104" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.8" />
-  <path d="M 296 76 A 46 46 0 0 1 296 104" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.8" />
-  <path d="M 198 64 A 68 68 0 0 0 198 116" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" fill="none" opacity="0.4" />
-  <path d="M 314 64 A 68 68 0 0 1 314 116" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" fill="none" opacity="0.4" />
+  <!-- ================= ANTENNA / TELEGRAM CLOUD BEACON ================= -->
+  <!-- Wi-Fi / Cloud Waves -->
+  <path d="M 204 70 A 58 58 0 0 0 204 102" stroke="#38bdf8" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.9" />
+  <path d="M 308 70 A 58 58 0 0 1 308 102" stroke="#38bdf8" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.9" />
+  <path d="M 184 56 A 84 84 0 0 0 184 116" stroke="#818cf8" stroke-width="3.5" stroke-linecap="round" fill="none" opacity="0.5" />
+  <path d="M 328 56 A 84 84 0 0 1 328 116" stroke="#818cf8" stroke-width="3.5" stroke-linecap="round" fill="none" opacity="0.5" />
 
-  <!-- Antenna Stem -->
-  <rect x="250" y="88" width="12" height="42" rx="6" fill="#cbd5e1" />
-  <!-- Glowing Antenna Tip -->
-  <circle cx="256" cy="84" r="18" fill="url(#orbGlow)" filter="url(#neonBlur)" />
-  <circle cx="256" cy="84" r="9" fill="#ffffff" />
+  <!-- Antenna Rod -->
+  <rect x="249" y="86" width="14" height="42" rx="7" fill="#cbd5e1" stroke="#475569" stroke-width="1.5" />
+  <!-- Glowing Floating Transmitter Sphere -->
+  <circle cx="256" cy="80" r="18" fill="url(#cyanSpark)" filter="url(#hyperGlow)" />
+  <circle cx="256" cy="80" r="8" fill="#ffffff" />
 
-  <!-- ================= EAR PODS / HEADPHONES ================= -->
-  <!-- Left Ear Pod -->
-  <rect x="92" y="196" width="36" height="88" rx="18" fill="url(#earPod)" />
-  <rect x="100" y="214" width="8" height="52" rx="4" fill="#67e8f9" filter="url(#neonBlur)" />
+  <!-- ================= SIDE AUDIO / COMM HEADSETS ================= -->
+  <!-- Left Cyber Headset -->
+  <g filter="url(#hyperGlow)">
+    <rect x="86" y="196" width="40" height="92" rx="20" fill="url(#headphoneRim)" />
+    <!-- Ring detail -->
+    <circle cx="106" cy="242" r="12" fill="#090d16" />
+    <circle cx="106" cy="242" r="6" fill="#38bdf8" />
+  </g>
 
-  <!-- Right Ear Pod -->
-  <rect x="384" y="196" width="36" height="88" rx="18" fill="url(#earPod)" />
-  <rect x="404" y="214" width="8" height="52" rx="4" fill="#67e8f9" filter="url(#neonBlur)" />
+  <!-- Right Cyber Headset -->
+  <g filter="url(#hyperGlow)">
+    <rect x="386" y="196" width="40" height="92" rx="20" fill="url(#headphoneRim)" />
+    <!-- Ring detail -->
+    <circle cx="406" cy="242" r="12" fill="#090d16" />
+    <circle cx="406" cy="242" r="6" fill="#38bdf8" />
+  </g>
 
-  <!-- ================= BOT HEAD CHASSIS (SLEEK WHITE/METALLIC) ================= -->
-  <rect x="118" y="124" width="276" height="232" rx="72" fill="url(#botChassis)" />
-  <!-- Forehead Highlight -->
-  <path d="M 160 144 Q 256 136 352 144" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.9" />
+  <!-- ================= MAIN PEARL ROBOT HELMET ================= -->
+  <!-- Outer Chassis with smooth aerodynamic curves -->
+  <rect x="114" y="122" width="284" height="240" rx="78" fill="url(#pearlChassis)" stroke="#e2e8f0" stroke-width="3" />
 
-  <!-- ================= OLED VISOR FACE (DARK GLOSSY SCREEN) ================= -->
-  <rect x="142" y="152" width="228" height="176" rx="52" fill="url(#visorOled)" stroke="#1e293b" stroke-width="3" />
-  <!-- Visor Glass Reflection -->
-  <path d="M 164 168 C 210 158 302 158 348 168" stroke="rgba(255,255,255,0.25)" stroke-width="3.5" stroke-linecap="round" fill="none" />
+  <!-- Subtle 3D Top-Light Specular Glare -->
+  <path d="M 160 142 Q 256 132 352 142" stroke="#ffffff" stroke-width="8" stroke-linecap="round" opacity="0.95" />
 
-  <!-- ================= GLOWING ROBOT EYES (EXPRESSIVE & CUTE) ================= -->
+  <!-- Side Ear Groove Accents -->
+  <line x1="130" y1="210" x2="130" y2="274" stroke="#94a3b8" stroke-width="3" stroke-linecap="round" />
+  <line x1="382" y1="210" x2="382" y2="274" stroke="#94a3b8" stroke-width="3" stroke-linecap="round" />
+
+  <!-- ================= BLACK MIRROR VISOR SCREEN ================= -->
+  <rect x="140" y="152" width="232" height="180" rx="54" fill="url(#mirrorGlass)" stroke="#1e293b" stroke-width="3.5" />
+
+  <!-- Curved Visor Specular Glass Reflection Arch -->
+  <path d="M 162 170 C 215 158 297 158 350 170" stroke="rgba(255, 255, 255, 0.28)" stroke-width="4.5" stroke-linecap="round" fill="none" />
+  <path d="M 172 182 C 220 172 292 172 340 182" stroke="rgba(255, 255, 255, 0.12)" stroke-width="2.5" stroke-linecap="round" fill="none" />
+
+  <!-- ================= VIBRANT SMART BOT EYES (EXPRESSIVE & ALIVE) ================= -->
   <!-- Left Eye -->
-  <g filter="url(#neonBlur)">
-    <!-- Eye Capsule -->
-    <rect x="176" y="194" width="52" height="52" rx="22" fill="url(#cyanGlowEye)" />
-    <!-- Pupil / Reflection Highlights -->
-    <circle cx="192" cy="208" r="8" fill="#ffffff" />
-    <circle cx="212" cy="226" r="4.5" fill="#ffffff" opacity="0.8" />
+  <g filter="url(#hyperGlow)">
+    <!-- Eye Capsule Housing -->
+    <rect x="174" y="196" width="56" height="56" rx="24" fill="url(#electricEye)" />
+    
+    <!-- Holographic Pupil Scanning Rings -->
+    <circle cx="202" cy="224" r="16" fill="none" stroke="#e0f2fe" stroke-width="2.5" opacity="0.6" />
+    
+    <!-- Bright Eye Reflection Sparkle 1 -->
+    <circle cx="192" cy="210" r="8.5" fill="#ffffff" />
+    <!-- Small Secondary Reflection Sparkle 2 -->
+    <circle cx="215" cy="232" r="4" fill="#ffffff" opacity="0.85" />
   </g>
 
   <!-- Right Eye -->
-  <g filter="url(#neonBlur)">
-    <!-- Eye Capsule -->
-    <rect x="284" y="194" width="52" height="52" rx="22" fill="url(#cyanGlowEye)" />
-    <!-- Pupil / Reflection Highlights -->
-    <circle cx="300" cy="208" r="8" fill="#ffffff" />
-    <circle cx="320" cy="226" r="4.5" fill="#ffffff" opacity="0.8" />
+  <g filter="url(#hyperGlow)">
+    <!-- Eye Capsule Housing -->
+    <rect x="282" y="196" width="56" height="56" rx="24" fill="url(#electricEye)" />
+
+    <!-- Holographic Pupil Scanning Rings -->
+    <circle cx="310" cy="224" r="16" fill="none" stroke="#e0f2fe" stroke-width="2.5" opacity="0.6" />
+
+    <!-- Bright Eye Reflection Sparkle 1 -->
+    <circle cx="300" cy="210" r="8.5" fill="#ffffff" />
+    <!-- Small Secondary Reflection Sparkle 2 -->
+    <circle cx="323" cy="232" r="4" fill="#ffffff" opacity="0.85" />
   </g>
 
-  <!-- Cute Rosy Tech Cheeks (Cyber Blushing) -->
-  <circle cx="172" cy="268" r="10" fill="#38bdf8" opacity="0.4" filter="url(#neonBlur)" />
-  <circle cx="340" cy="268" r="10" fill="#38bdf8" opacity="0.4" filter="url(#neonBlur)" />
+  <!-- High-Tech Neon Blushing Cheeks -->
+  <circle cx="168" cy="272" r="11" fill="#38bdf8" opacity="0.35" filter="url(#hyperGlow)" />
+  <circle cx="344" cy="272" r="11" fill="#38bdf8" opacity="0.35" filter="url(#hyperGlow)" />
 
-  <!-- Friendly Curved Bot Smile -->
-  <path d="M 230 268 Q 256 288 282 268" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" fill="none" filter="url(#neonBlur)" />
+  <!-- Friendly Tech Smile Curved Visor Display -->
+  <path d="M 230 274 Q 256 294 282 274" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" fill="none" filter="url(#hyperGlow)" />
 
-  <!-- ================= ROBOT BODY / SERVER COLLAR (BOTTOM) ================= -->
-  <!-- Neck Joint -->
-  <rect x="228" y="356" width="56" height="18" rx="6" fill="#334155" />
+  <!-- ================= SERVER NECK & CHEST RACK (HOSTING FOUNDATION) ================= -->
+  <!-- Neck Cable Connector -->
+  <rect x="226" y="358" width="60" height="20" rx="8" fill="#1e293b" stroke="#334155" stroke-width="2" />
+  <line x1="246" y1="362" x2="246" y2="374" stroke="#64748b" stroke-width="2" />
+  <line x1="266" y1="362" x2="266" y2="374" stroke="#64748b" stroke-width="2" />
 
-  <!-- Chest Server Plate -->
-  <path d="M 160 374 L 352 374 L 372 438 C 372 446 364 452 356 452 L 156 452 C 148 452 140 446 140 438 Z" fill="#0f172a" stroke="#1e293b" stroke-width="2" />
+  <!-- Chest Server Blade (Hosting VPS Chassis) -->
+  <path d="M 154 378 L 358 378 L 380 452 C 380 460 372 466 364 466 L 148 466 C 140 466 132 460 132 452 Z" 
+        fill="#090d16" stroke="#334155" stroke-width="3" />
 
-  <!-- 24/7 Hosting Live Server LED Indicators on Chest -->
-  <!-- Live Status LED (Green 24/7) -->
-  <circle cx="216" cy="412" r="7" fill="#10b981" filter="url(#neonBlur)" />
-  <circle cx="216" cy="412" r="3" fill="#ffffff" />
+  <!-- Server Vent Grills on Chest Plate -->
+  <line x1="168" y1="400" x2="344" y2="400" stroke="#1e293b" stroke-width="4" stroke-linecap="round" />
   
-  <!-- High Speed Activity LED (Cyan) -->
-  <circle cx="256" cy="412" r="7" fill="#38bdf8" filter="url(#neonBlur)" />
-  <circle cx="256" cy="412" r="3" fill="#ffffff" />
+  <!-- 24/7 Hosting Live LED Indicators (Green, Cyan, Purple) -->
+  <!-- 1. LIVE GREEN UP-TIME LED -->
+  <g filter="url(#greenLiveGlow)">
+    <circle cx="212" cy="428" r="8" fill="#10b981" />
+    <circle cx="212" cy="428" r="3.5" fill="#ffffff" />
+  </g>
 
-  <!-- Cloud Sync LED (Purple) -->
-  <circle cx="296" cy="412" r="7" fill="#a855f7" filter="url(#neonBlur)" />
-  <circle cx="296" cy="412" r="3" fill="#ffffff" />
+  <!-- 2. HIGH SPEED EXECUTION CYAN LED -->
+  <g filter="url(#hyperGlow)">
+    <circle cx="256" cy="428" r="8" fill="#38bdf8" />
+    <circle cx="256" cy="428" r="3.5" fill="#ffffff" />
+  </g>
 
-  <!-- Server Vent Slots on Chest -->
-  <line x1="200" y1="432" x2="312" y2="432" stroke="#334155" stroke-width="2.5" stroke-linecap="round" />
+  <!-- 3. CLOUD SYNC PURPLE LED -->
+  <g filter="url(#hyperGlow)">
+    <circle cx="300" cy="428" r="8" fill="#a855f7" />
+    <circle cx="300" cy="428" r="3.5" fill="#ffffff" />
+  </g>
+
+  <!-- Lower Server Air-Intake Slots -->
+  <line x1="220" y1="448" x2="292" y2="448" stroke="#334155" stroke-width="3" stroke-linecap="round" />
 </svg>
