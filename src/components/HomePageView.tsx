@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { WorkspaceStatus, TelegramBotProfile, AppNotification, ActiveServer, AuthUser } from "../types";
 import { PurchasePlanModal, PlanToPurchase } from "./PurchasePlanModal";
+import { ArchitectureModal } from "./ArchitectureModal";
 
 interface HomePageViewProps {
   status: WorkspaceStatus | null;
@@ -94,6 +95,9 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
     name: "Mini-v1",
     price: 100,
   });
+
+  // Architecture Pipeline Modal State
+  const [isArchModalOpen, setIsArchModalOpen] = useState(false);
 
   // Handle password generation
   const handleGenPassword = () => {
@@ -246,12 +250,21 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
             : "Welcome back. Here's what's happening with your services."}
         </p>
 
-        {/* Member Since Pill Badge */}
-        <div className="pt-1">
+        {/* Member Since Pill Badge + Live Architecture Pipeline Button */}
+        <div className="pt-1 flex items-center gap-2 flex-wrap">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-slate-200 bg-white/90 text-slate-600 text-xs font-medium shadow-2xs">
             <Calendar className="w-3.5 h-3.5 text-slate-500" />
             <span>Member Since: Jul 25, 2026</span>
           </div>
+
+          <button
+            onClick={() => setIsArchModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-indigo-200 bg-indigo-50/90 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer group"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>GitHub ➔ Vercel ➔ VPS ➔ Docker Flow</span>
+            <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </button>
         </div>
       </div>
 
@@ -847,6 +860,13 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
           }}
         />
       )}
+
+      {/* 6. Live Architecture Pipeline Modal */}
+      <ArchitectureModal
+        isOpen={isArchModalOpen}
+        onClose={() => setIsArchModalOpen(false)}
+        lang={lang}
+      />
     </div>
   );
 };

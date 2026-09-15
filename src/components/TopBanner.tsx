@@ -39,6 +39,8 @@ import {
   LogIn,
 } from "lucide-react";
 import { WorkspaceStatus, AppNotification, AuthUser } from "../types";
+import { VpsConnectionModal } from "./VpsConnectionModal";
+import { getVpsApiBaseUrl } from "../lib/api";
 
 interface TopBannerProps {
   lang: "bn" | "en";
@@ -641,7 +643,24 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                       <span>Claim Rewards</span>
                     </button>
 
-                    {/* 8. Account Settings / Login */}
+                    {/* 8. VPS API Connection Manager */}
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setActiveModal("vps");
+                      }}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <Server className="w-5 h-5 text-indigo-600" />
+                        <span>VPS API Connection</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 font-bold border border-indigo-100">
+                        {getVpsApiBaseUrl() ? "CUSTOM VPS" : "VERCEL PROXY"}
+                      </span>
+                    </button>
+
+                    {/* 9. Account Settings / Login */}
                     {currentUser ? (
                       <button
                         onClick={() => {
@@ -850,6 +869,13 @@ export const TopBanner: React.FC<TopBannerProps> = ({
           </div>
         </div>
       )}
+
+      {/* VPS API Connection Manager Modal */}
+      <VpsConnectionModal
+        isOpen={activeModal === "vps"}
+        onClose={() => setActiveModal(null)}
+        lang={lang}
+      />
     </header>
   );
 };

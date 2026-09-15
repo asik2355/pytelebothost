@@ -919,9 +919,12 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
                 <span className="font-bold tracking-wider uppercase text-slate-100 text-xs sm:text-sm font-mono">
                   LIVE CONSOLE
                 </span>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/40 text-[10px] font-mono text-purple-300">
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/40 text-[10px] font-mono text-purple-300">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  Freestyle VPS: 208.72.218.137
+                  VPS Node: 208.72.218.137
+                </span>
+                <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-950/80 border border-cyan-500/40 text-[10px] font-mono text-cyan-300">
+                  <span>Docker: python:3.12-slim</span>
                 </span>
               </div>
 
