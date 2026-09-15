@@ -20,6 +20,68 @@ import {
   sendFirebasePasswordReset,
 } from "../lib/firebase";
 
+// Helper to format clean, branded error messages without revealing internal database or Firebase names
+function formatAuthErrorMessage(err: any, lang: "bn" | "en"): string {
+  if (!err) return lang === "bn" ? "একটি অনাকাঙ্ক্ষিত ত্রুটি ঘটেছে।" : "An unexpected error occurred.";
+
+  const code = err.code || "";
+  const rawMsg = err.message || "";
+
+  if (
+    code === "auth/popup-closed-by-user" ||
+    code === "auth/cancelled-popup-request"
+  ) {
+    return lang === "bn" ? "সাইন-ইন উইন্ডো বন্ধ করা হয়েছে।" : "Sign-in popup was cancelled.";
+  }
+
+  if (code === "auth/unauthorized-domain") {
+    return lang === "bn"
+      ? "আপনার ডোমেইনটি অথেন্টিকেশনের জন্য অনুমোদিত নয়। দয়া করে এডমিনের সাথে যোগাযোগ করুন।"
+      : "This domain is not authorized for OAuth. Please contact support.";
+  }
+
+  if (
+    code === "auth/invalid-credential" ||
+    code === "auth/wrong-password" ||
+    code === "auth/user-not-found"
+  ) {
+    return lang === "bn" ? "ইমেইল অথবা পাসওয়ার্ড সঠিক নয়।" : "Incorrect email or password.";
+  }
+
+  if (code === "auth/email-already-in-use") {
+    return lang === "bn"
+      ? "এই ইমেইলে আগেই একাউন্ট খোলা হয়েছে। দয়া করে লগইন করুন।"
+      : "An account with this email already exists. Please log in.";
+  }
+
+  if (code === "auth/weak-password") {
+    return lang === "bn"
+      ? "পাসওয়ার্ডটি খুবই দুর্বল। শক্তিশালী পাসওয়ার্ড ব্যবহার করুন।"
+      : "Password is too weak. Please use a stronger password.";
+  }
+
+  if (code === "auth/too-many-requests") {
+    return lang === "bn"
+      ? "অতিরিক্ত বার চেষ্টা করা হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।"
+      : "Too many failed attempts. Please try again later.";
+  }
+
+  if (code === "auth/network-request-failed") {
+    return lang === "bn"
+      ? "ইন্টারনেট কানেকশনে সমস্যা হচ্ছে। দয়া করে নেটওয়ার্ক চেক করুন।"
+      : "Network connection error. Please check your internet.";
+  }
+
+  // Strip raw "Firebase: Error (auth/...)" if present
+  if (typeof rawMsg === "string" && (rawMsg.includes("Firebase:") || rawMsg.includes("auth/"))) {
+    return lang === "bn"
+      ? "অথেন্টিকেশনে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।"
+      : "Authentication failed. Please try again.";
+  }
+
+  return rawMsg || (lang === "bn" ? "অপারেশন ব্যর্থ হয়েছে।" : "Operation failed.");
+}
+
 interface AuthPageViewProps {
   initialMode: "login" | "registration";
   lang: "bn" | "en";
@@ -96,20 +158,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
       }, 600);
     } catch (err: any) {
       console.error("Google Auth error:", err);
-      if (
-        err.code === "auth/popup-closed-by-user" ||
-        err.code === "auth/cancelled-popup-request"
-      ) {
-        setErrorMessage(
-          lang === "bn"
-            ? "গুগল সাইন-ইন উইন্ডো বন্ধ করা হয়েছে।"
-            : "Google sign-in popup was closed."
-        );
-      } else {
-        setErrorMessage(
-          err.message || (lang === "bn" ? "গুগল সাইন-ইন ব্যর্থ হয়েছে।" : "Google sign in failed.")
-        );
-      }
+      setErrorMessage(formatAuthErrorMessage(err, lang));
     } finally {
       setIsGoogleLoading(false);
     }
@@ -187,19 +236,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
       }, 600);
     } catch (err: any) {
       console.warn("Login Error:", err);
-      if (
-        err.code === "auth/invalid-credential" ||
-        err.code === "auth/wrong-password" ||
-        err.code === "auth/user-not-found"
-      ) {
-        setErrorMessage(
-          lang === "bn" ? "ইমেইল অথবা পাসওয়ার্ড সঠিক নয়।" : "Incorrect email or password."
-        );
-      } else {
-        setErrorMessage(
-          err.message || (lang === "bn" ? "লগইন ব্যর্থ হয়েছে।" : "Login failed.")
-        );
-      }
+      setErrorMessage(formatAuthErrorMessage(err, lang));
     } finally {
       setIsLoading(false);
     }
@@ -265,11 +302,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
         );
       } catch (fbErr: any) {
         if (fbErr.code === "auth/email-already-in-use") {
-          throw new Error(
-            lang === "bn"
-              ? "এই ইমেইলে আগেই একাউন্ট খোলা হয়েছে। দয়া করে লগইন করুন।"
-              : "An account with this email already exists. Please log in."
-          );
+          throw fbErr;
         }
 
         // Fallback to server API
@@ -317,17 +350,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
       }, 600);
     } catch (err: any) {
       console.warn("Register Error:", err);
-      if (err.code === "auth/email-already-in-use") {
-        setErrorMessage(
-          lang === "bn"
-            ? "এই ইমেইলে আগেই একাউন্ট খোলা হয়েছে। দয়া করে লগইন করুন।"
-            : "An account with this email already exists. Please log in."
-        );
-      } else {
-        setErrorMessage(
-          err.message || (lang === "bn" ? "রেজিস্ট্রেশন ব্যর্থ হয়েছে।" : "Registration failed.")
-        );
-      }
+      setErrorMessage(formatAuthErrorMessage(err, lang));
     } finally {
       setIsLoading(false);
     }
@@ -353,12 +376,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
         });
         setForgotSuccess(true);
       } catch {
-        setErrorMessage(
-          err.message ||
-            (lang === "bn"
-              ? "পাসওয়ার্ড রিসেট ইমেইল পাঠানো যায়নি।"
-              : "Failed to send reset email.")
-        );
+        setErrorMessage(formatAuthErrorMessage(err, lang));
       }
     } finally {
       setIsLoading(false);
