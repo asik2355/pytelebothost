@@ -2,24 +2,23 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "User profile with authentication and wallet details",
+      "description": "User profile with Firebase authentication and wallet balance details",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "Unique user ID" },
+        "id": { "type": "string", "description": "Unique user ID (Firebase UID)" },
         "name": { "type": "string", "description": "User display name", "maxLength": 100 },
         "email": { "type": "string", "description": "User email address", "maxLength": 200 },
+        "photoURL": { "type": "string", "description": "User avatar profile picture URL" },
         "telegramUsername": { "type": "string", "description": "Optional Telegram username", "maxLength": 100 },
-        "passwordHash": { "type": "string", "description": "PBKDF2 SHA512 password hash" },
-        "salt": { "type": "string", "description": "Cryptographic salt" },
+        "balance": { "type": "number", "description": "User wallet balance in BDT" },
+        "walletBalance": { "type": "number", "description": "Legacy wallet balance alias" },
         "role": { "type": "string", "enum": ["user", "admin"], "description": "User authorization role" },
-        "walletBalance": { "type": "number", "description": "User balance in BDT" },
         "plan": { "type": "string", "description": "Active subscription plan name" },
         "serversCount": { "type": "number", "description": "Count of active servers" },
-        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
-        "lastLoginAt": { "type": "string", "format": "date-time", "description": "Last login timestamp" },
-        "resetToken": { "type": "string", "description": "Optional password reset token" }
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
+        "lastLoginAt": { "type": "string", "format": "date-time", "description": "Last login timestamp" }
       },
-      "required": ["id", "name", "email", "passwordHash", "salt", "role", "walletBalance", "createdAt"]
+      "required": ["id", "name", "email", "createdAt"]
     },
     "Session": {
       "title": "Session",

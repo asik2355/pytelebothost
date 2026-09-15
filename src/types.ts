@@ -82,7 +82,11 @@ export interface AuthUser {
   email: string;
   telegramUsername?: string;
   avatarUrl?: string;
+  photoURL?: string;
+  balance?: number;
+  walletBalance?: number;
   createdAt?: string;
+  lastLoginAt?: string;
   role?: string;
 }
 

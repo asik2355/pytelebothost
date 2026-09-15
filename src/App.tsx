@@ -12,6 +12,7 @@ import { ServerControlPanelView } from "./components/ServerControlPanelView";
 import { AuthPageView } from "./components/AuthPageView";
 import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification, ActiveServer, AuthUser } from "./types";
 import { apiFetch } from "./lib/api";
+import { subscribeToFirebaseAuthState, logoutFirebaseAuth } from "./lib/firebase";
 
 export default function App() {
   const [lang, setLang] = useState<"bn" | "en">("en");
@@ -138,36 +139,72 @@ export default function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  // Validate session with VPS Database on initial mount
+  // Subscribe to Firebase Authentication state (persists across page refresh)
   useEffect(() => {
-    const token = localStorage.getItem("vps_auth_token");
-    if (!token) return;
+    const unsubscribe = subscribeToFirebaseAuthState((fbUser) => {
+      if (fbUser) {
+        setCurrentUser((prev) => ({
+          id: fbUser.id,
+          name: fbUser.name,
+          email: fbUser.email,
+          photoURL: fbUser.photoURL || prev?.photoURL,
+          avatarUrl: fbUser.avatarUrl || prev?.avatarUrl,
+          telegramUsername: fbUser.telegramUsername || prev?.telegramUsername,
+          role: fbUser.role || prev?.role || "user",
+          balance: typeof fbUser.balance === "number" ? fbUser.balance : (prev?.balance ?? 0),
+          walletBalance: typeof fbUser.balance === "number" ? fbUser.balance : (prev?.balance ?? 0),
+          createdAt: fbUser.createdAt || prev?.createdAt || new Date().toISOString(),
+          lastLoginAt: fbUser.lastLoginAt || new Date().toISOString(),
+        }));
 
-    apiFetch("/api/auth/me", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && data.success && data.user) {
-          setCurrentUser((prev) => ({
-            id: data.user.id,
-            name: data.user.name,
-            email: data.user.email,
-            telegramUsername: data.user.telegramUsername,
-            role: data.user.role || "user",
-            createdAt: data.user.createdAt || (prev?.createdAt || new Date().toISOString()),
-          }));
+        if (typeof fbUser.balance === "number") {
+          setWalletBalance(fbUser.balance);
         }
+
+        try {
+          localStorage.setItem("hostbot_auth_user", JSON.stringify(fbUser));
+        } catch {
+          // ignore
+        }
+      }
+    });
+
+    // Also check VPS server token if present
+    const token = localStorage.getItem("vps_auth_token");
+    if (token) {
+      apiFetch("/api/auth/me", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       })
-      .catch(() => {
-        // network or server startup notice
-      });
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && data.success && data.user) {
+            setCurrentUser((prev) => ({
+              id: data.user.id,
+              name: data.user.name,
+              email: data.user.email,
+              telegramUsername: data.user.telegramUsername,
+              role: data.user.role || "user",
+              createdAt: data.user.createdAt || (prev?.createdAt || new Date().toISOString()),
+            }));
+          }
+        })
+        .catch(() => {
+          // network or server startup notice
+        });
+    }
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleAuthSuccess = useCallback((user: AuthUser) => {
     setCurrentUser(user);
+    if (typeof user.balance === "number") {
+      setWalletBalance(user.balance);
+    }
     try {
       localStorage.setItem("hostbot_auth_user", JSON.stringify(user));
     } catch {
@@ -186,7 +223,12 @@ export default function App() {
     });
   }, [handleAddNotification]);
 
-  const handleSignOut = useCallback(() => {
+  const handleSignOut = useCallback(async () => {
+    try {
+      await logoutFirebaseAuth();
+    } catch {
+      // ignore
+    }
     setCurrentUser(null);
     try {
       localStorage.removeItem("hostbot_auth_user");

@@ -7,17 +7,18 @@ import {
   EyeOff,
   ArrowRight,
   CheckCircle2,
-  ShieldCheck,
-  Zap,
-  Bot,
-  Server,
   ArrowLeft,
   Send,
   AlertCircle,
-  Database,
 } from "lucide-react";
 import { AuthUser } from "../types";
 import { apiFetch } from "../lib/api";
+import {
+  signInWithGoogleAuth,
+  loginWithEmailAuth,
+  registerWithEmailAuth,
+  sendFirebasePasswordReset,
+} from "../lib/firebase";
 
 interface AuthPageViewProps {
   initialMode: "login" | "registration";
@@ -36,6 +37,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [forgotPasswordModal, setForgotPasswordModal] = useState(false);
@@ -65,6 +67,57 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
     onNavigate(newMode === "login" ? "/login" : "/registration");
   };
 
+  /**
+   * 1. Google Sign-In Handler
+   * - Creates profile with balance: 0 on first time
+   * - Preserves balance & profile for existing users
+   */
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const { user, isNewUser } = await signInWithGoogleAuth();
+
+      setSuccessMessage(
+        isNewUser
+          ? lang === "bn"
+            ? "গুগল দিয়ে সফলভাবে অ্যাকাউন্ট তৈরি হয়েছে! স্বাগতম bot-host.xyz-এ।"
+            : "Welcome! Google account created successfully."
+          : lang === "bn"
+          ? "গুগল দিয়ে সফলভাবে লগইন হয়েছে! ড্যাশবোর্ডে রিডাইরেক্ট করা হচ্ছে..."
+          : "Logged in with Google successfully! Redirecting..."
+      );
+
+      setTimeout(() => {
+        onAuthSuccess(user);
+        onNavigate("/home");
+      }, 600);
+    } catch (err: any) {
+      console.error("Google Auth error:", err);
+      if (
+        err.code === "auth/popup-closed-by-user" ||
+        err.code === "auth/cancelled-popup-request"
+      ) {
+        setErrorMessage(
+          lang === "bn"
+            ? "গুগল সাইন-ইন উইন্ডো বন্ধ করা হয়েছে।"
+            : "Google sign-in popup was closed."
+        );
+      } else {
+        setErrorMessage(
+          err.message || (lang === "bn" ? "গুগল সাইন-ইন ব্যর্থ হয়েছে।" : "Google sign in failed.")
+        );
+      }
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  /**
+   * 2. Email + Password Login Handler
+   */
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -86,67 +139,41 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
     setIsLoading(true);
 
     try {
-      const res = await apiFetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          password,
-        }),
-      });
+      let loggedInUser: AuthUser;
 
-      const data = await res.json();
-
-      if (res.ok && data.success && data.user) {
-        if (data.token) {
-          localStorage.setItem("vps_auth_token", data.token);
-        }
-
-        const loggedInUser: AuthUser = {
-          id: data.user.id,
-          name: data.user.name,
-          email: data.user.email,
-          telegramUsername: data.user.telegramUsername,
-          role: data.user.role || "user",
-          createdAt: data.user.createdAt || new Date().toISOString(),
-        };
-
-        setSuccessMessage(
-          lang === "bn"
-            ? "সফলভাবে লগইন হয়েছে! ড্যাশবোর্ডে রিডাইরেক্ট করা হচ্ছে..."
-            : "Logged in successfully! Redirecting..."
-        );
-
-        setTimeout(() => {
-          onAuthSuccess(loggedInUser);
-          onNavigate("/home");
-        }, 700);
-      } else {
-        setErrorMessage(data.message || (lang === "bn" ? "লগইন ব্যর্থ হয়েছে।" : "Login failed."));
-      }
-    } catch (err: any) {
-      console.warn("VPS API Login Notice:", err.message);
-      // Fallback local check
-      let existingUsers: AuthUser[] = [];
       try {
-        const stored = localStorage.getItem("hostbot_registered_users");
-        if (stored) existingUsers = JSON.parse(stored);
-      } catch {
-        // ignore
+        loggedInUser = await loginWithEmailAuth(email.trim(), password);
+      } catch (fbErr: any) {
+        // Fallback to server API if local server DB user
+        const res = await apiFetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success && data.user) {
+          if (data.token) {
+            localStorage.setItem("vps_auth_token", data.token);
+          }
+
+          loggedInUser = {
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            telegramUsername: data.user.telegramUsername,
+            role: data.user.role || "user",
+            balance: data.user.walletBalance ?? 0,
+            createdAt: data.user.createdAt || new Date().toISOString(),
+          };
+        } else {
+          throw fbErr;
+        }
       }
-
-      const foundUser = existingUsers.find(
-        (u) => u.email.toLowerCase() === email.trim().toLowerCase()
-      );
-
-      const loggedInUser: AuthUser = foundUser || {
-        id: "usr_" + Math.random().toString(36).substring(2, 9),
-        name: email.split("@")[0] || "Alif Sheikh",
-        email: email.trim(),
-        telegramUsername: "@" + (email.split("@")[0] || "botuser"),
-        role: "user",
-        createdAt: new Date().toISOString(),
-      };
 
       setSuccessMessage(
         lang === "bn"
@@ -157,12 +184,30 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
       setTimeout(() => {
         onAuthSuccess(loggedInUser);
         onNavigate("/home");
-      }, 700);
+      }, 600);
+    } catch (err: any) {
+      console.warn("Login Error:", err);
+      if (
+        err.code === "auth/invalid-credential" ||
+        err.code === "auth/wrong-password" ||
+        err.code === "auth/user-not-found"
+      ) {
+        setErrorMessage(
+          lang === "bn" ? "ইমেইল অথবা পাসওয়ার্ড সঠিক নয়।" : "Incorrect email or password."
+        );
+      } else {
+        setErrorMessage(
+          err.message || (lang === "bn" ? "লগইন ব্যর্থ হয়েছে।" : "Login failed.")
+        );
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
+  /**
+   * 3. Email + Password Sign Up Handler
+   */
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -209,93 +254,112 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
     setIsLoading(true);
 
     try {
-      const res = await apiFetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          password,
-          telegramUsername: telegramUsername.trim(),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.success && data.user) {
-        if (data.token) {
-          localStorage.setItem("vps_auth_token", data.token);
-        }
-
-        const newUser: AuthUser = {
-          id: data.user.id,
-          name: data.user.name,
-          email: data.user.email,
-          telegramUsername: data.user.telegramUsername,
-          role: data.user.role || "user",
-          createdAt: data.user.createdAt || new Date().toISOString(),
-        };
-
-        // Cache locally as well
-        try {
-          let existingUsers: AuthUser[] = [];
-          const stored = localStorage.getItem("hostbot_registered_users");
-          if (stored) existingUsers = JSON.parse(stored);
-          existingUsers.push(newUser);
-          localStorage.setItem("hostbot_registered_users", JSON.stringify(existingUsers));
-        } catch {
-          // ignore
-        }
-
-        setSuccessMessage(
-          lang === "bn"
-            ? "অ্যাকাউন্ট তৈরি সফল হয়েছে! স্বাগতম bot-host.xyz-এ।"
-            : "Account created successfully! Welcome to bot-host.xyz."
-        );
-
-        setTimeout(() => {
-          onAuthSuccess(newUser);
-          onNavigate("/home");
-        }, 700);
-      } else {
-        setErrorMessage(data.message || (lang === "bn" ? "রেজিস্ট্রেশন ব্যর্থ হয়েছে।" : "Registration failed."));
-      }
-    } catch (err: any) {
-      console.warn("VPS API Register Notice:", err.message);
-      // Local fallback
-      const newUser: AuthUser = {
-        id: "usr_" + Math.random().toString(36).substring(2, 9),
-        name: name.trim(),
-        email: email.trim(),
-        telegramUsername: telegramUsername.trim()
-          ? telegramUsername.startsWith("@")
-            ? telegramUsername.trim()
-            : "@" + telegramUsername.trim()
-          : undefined,
-        role: "user",
-        createdAt: new Date().toISOString(),
-      };
+      let newUser: AuthUser;
 
       try {
-        let existingUsers: AuthUser[] = [];
-        const stored = localStorage.getItem("hostbot_registered_users");
-        if (stored) existingUsers = JSON.parse(stored);
-        existingUsers.push(newUser);
-        localStorage.setItem("hostbot_registered_users", JSON.stringify(existingUsers));
-      } catch {
-        // ignore
+        newUser = await registerWithEmailAuth(
+          name.trim(),
+          email.trim(),
+          password,
+          telegramUsername.trim()
+        );
+      } catch (fbErr: any) {
+        if (fbErr.code === "auth/email-already-in-use") {
+          throw new Error(
+            lang === "bn"
+              ? "এই ইমেইলে আগেই একাউন্ট খোলা হয়েছে। দয়া করে লগইন করুন।"
+              : "An account with this email already exists. Please log in."
+          );
+        }
+
+        // Fallback to server API
+        const res = await apiFetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            email: email.trim(),
+            password,
+            telegramUsername: telegramUsername.trim(),
+          }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success && data.user) {
+          if (data.token) {
+            localStorage.setItem("vps_auth_token", data.token);
+          }
+
+          newUser = {
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            telegramUsername: data.user.telegramUsername,
+            role: data.user.role || "user",
+            balance: 0,
+            createdAt: data.user.createdAt || new Date().toISOString(),
+          };
+        } else {
+          throw fbErr;
+        }
       }
 
       setSuccessMessage(
         lang === "bn"
-          ? "রেজিস্ট্রেশন সফল হয়েছে! স্বাগতম bot-host.xyz-এ।"
+          ? "অ্যাকাউন্ট তৈরি সফল হয়েছে! স্বাগতম bot-host.xyz-এ।"
           : "Account created successfully! Welcome to bot-host.xyz."
       );
 
       setTimeout(() => {
         onAuthSuccess(newUser);
         onNavigate("/home");
-      }, 700);
+      }, 600);
+    } catch (err: any) {
+      console.warn("Register Error:", err);
+      if (err.code === "auth/email-already-in-use") {
+        setErrorMessage(
+          lang === "bn"
+            ? "এই ইমেইলে আগেই একাউন্ট খোলা হয়েছে। দয়া করে লগইন করুন।"
+            : "An account with this email already exists. Please log in."
+        );
+      } else {
+        setErrorMessage(
+          err.message || (lang === "bn" ? "রেজিস্ট্রেশন ব্যর্থ হয়েছে।" : "Registration failed.")
+        );
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * 4. Forgot Password Handler
+   */
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+
+    setIsLoading(true);
+    try {
+      await sendFirebasePasswordReset(forgotEmail.trim());
+      setForgotSuccess(true);
+    } catch (err: any) {
+      try {
+        await apiFetch("/api/auth/forgot-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: forgotEmail.trim() }),
+        });
+        setForgotSuccess(true);
+      } catch {
+        setErrorMessage(
+          err.message ||
+            (lang === "bn"
+              ? "পাসওয়ার্ড রিসেট ইমেইল পাঠানো যায়নি।"
+              : "Failed to send reset email.")
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -332,7 +396,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
         {/* Authentication Forms */}
         <div className="flex flex-col justify-center">
           {/* Header Switcher Tabs */}
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -362,6 +426,60 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
             </div>
           </div>
 
+          {/* Continue with Google Button */}
+          <button
+            type="button"
+            disabled={isLoading || isGoogleLoading}
+            onClick={handleGoogleSignIn}
+            className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all active:scale-[0.99] flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed mb-4"
+          >
+            {isGoogleLoading ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+                <span>{lang === "bn" ? "গুগল ভেরিফিকেশন হচ্ছে..." : "Connecting Google..."}</span>
+              </span>
+            ) : (
+              <>
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                  />
+                </svg>
+                <span>
+                  {mode === "login"
+                    ? lang === "bn"
+                      ? "Continue with Google"
+                      : "Continue with Google"
+                    : lang === "bn"
+                    ? "Sign up with Google"
+                    : "Sign up with Google"}
+                </span>
+              </>
+            )}
+          </button>
+
+          {/* Divider */}
+          <div className="relative flex items-center justify-center mb-4">
+            <div className="border-t border-slate-200/80 w-full" />
+            <span className="bg-white px-3 text-[11px] font-medium text-slate-400 shrink-0">
+              {lang === "bn" ? "অথবা ইমেইল দিয়ে" : "or with email"}
+            </span>
+            <div className="border-t border-slate-200/80 w-full" />
+          </div>
+
           {/* Alert Messages */}
           {errorMessage && (
             <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2 animate-in fade-in">
@@ -383,7 +501,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
               {/* Email field */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  {lang === "bn" ? "ইমেইল বা ইউজারনেম" : "Email Address"}
+                  {lang === "bn" ? "ইমেইল অ্যাড্রেস" : "Email Address"}
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -408,7 +526,10 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
                   </label>
                   <button
                     type="button"
-                    onClick={() => setForgotPasswordModal(true)}
+                    onClick={() => {
+                      setForgotPasswordModal(true);
+                      setForgotEmail(email);
+                    }}
                     className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer"
                   >
                     {lang === "bn" ? "পাসওয়ার্ড ভুলে গেছেন?" : "Forgot Password?"}
@@ -680,7 +801,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
             </h3>
             <p className="text-xs text-slate-500 mb-4">
               {lang === "bn"
-                ? "আপনার রেজিস্টার্ড ইমেইল অ্যাড্রেস লিখুন। আমরা রিকভারি লিংক পাঠিয়ে দেব।"
+                ? "আপনার রেজিস্টার্ড ইমেইল অ্যাড্রেস লিখুন। আমরা রিকভারি লিংক ও নির্দেশাবলী পাঠিয়ে দেব।"
                 : "Enter your registered email address to receive password reset instructions."}
             </p>
 
@@ -691,8 +812,8 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
                 </div>
                 <p className="text-xs text-emerald-800 font-medium">
                   {lang === "bn"
-                    ? "পাসওয়ার্ড রিসেট লিংক ও ওটিপি আপনার ইমেইলে পাঠানো হয়েছে!"
-                    : "Password reset link and OTP code sent to your email successfully!"}
+                    ? "পাসওয়ার্ড রিসেট লিংক সফলভাবে আপনার ইমেইলে পাঠানো হয়েছে!"
+                    : "Password reset link has been sent to your email address successfully!"}
                 </p>
                 <button
                   type="button"
@@ -700,29 +821,13 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
                     setForgotPasswordModal(false);
                     setForgotSuccess(false);
                   }}
-                  className="w-full py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold"
+                  className="w-full py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold cursor-pointer"
                 >
                   {lang === "bn" ? "ঠিক আছে" : "Done"}
                 </button>
               </div>
             ) : (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!forgotEmail) return;
-                  try {
-                    await apiFetch("/api/auth/forgot-password", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ email: forgotEmail.trim() }),
-                    });
-                  } catch {
-                    // ignore
-                  }
-                  setForgotSuccess(true);
-                }}
-                className="space-y-3"
-              >
+              <form onSubmit={handleForgotSubmit} className="space-y-3">
                 <div>
                   <input
                     type="email"
@@ -737,15 +842,22 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setForgotPasswordModal(false)}
-                    className="flex-1 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-200"
+                    className="flex-1 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-200 cursor-pointer"
                   >
                     {lang === "bn" ? "বাতিল" : "Cancel"}
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700"
+                    disabled={isLoading}
+                    className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 cursor-pointer disabled:opacity-60"
                   >
-                    {lang === "bn" ? "লিংক পাঠান" : "Send Link"}
+                    {isLoading
+                      ? lang === "bn"
+                        ? "পাঠানো হচ্ছে..."
+                        : "Sending..."
+                      : lang === "bn"
+                      ? "লিংক পাঠান"
+                      : "Send Link"}
                   </button>
                 </div>
               </form>

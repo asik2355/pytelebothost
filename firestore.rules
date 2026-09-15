@@ -15,10 +15,25 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Users collection
+    // Users collection: users/{userId}
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || resource.data.email == request.auth.token.email);
-      allow write: if isSignedIn() && request.auth.uid == userId;
+      // User can only read their own profile document
+      allow read: if isOwner(userId);
+      
+      // User can create their initial profile (e.g. on Google Sign In or Email Sign Up)
+      // Enforce zero balance on client creation and default 'user' role
+      allow create: if isOwner(userId)
+        && (!('balance' in request.resource.data) || request.resource.data.balance == 0)
+        && (!('role' in request.resource.data) || request.resource.data.role == 'user');
+
+      // User can update profile metadata (name, photoURL, lastLoginAt, telegramUsername)
+      // STRICT RULE: Cannot modify balance or escalate role from client!
+      allow update: if isOwner(userId)
+        && (!('balance' in request.resource.data) || request.resource.data.balance == resource.data.balance)
+        && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role);
+
+      // Client cannot delete user accounts directly
+      allow delete: if false;
     }
 
     // Sessions collection
@@ -26,7 +41,7 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
-    // Servers collection
+    // Hosted Servers collection
     match /servers/{serverId} {
       allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
       allow write: if isSignedIn() && (request.resource.data.userId == request.auth.uid);

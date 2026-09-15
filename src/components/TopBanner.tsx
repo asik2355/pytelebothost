@@ -347,10 +347,17 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                   id="banner-avatar-btn"
                   type="button"
                   onClick={() => setIsProfileOpen(!isProfileOpen)}
-                  className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 hover:opacity-95 active:scale-95 flex items-center justify-center text-white shadow-2xs ring-1.5 ring-white transition-all cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 hover:opacity-95 active:scale-95 flex items-center justify-center text-white shadow-2xs ring-1.5 ring-white transition-all cursor-pointer overflow-hidden"
                   title={`${currentUser.name} (${currentUser.email})`}
                 >
-                  {currentUser.name ? (
+                  {currentUser.photoURL || currentUser.avatarUrl ? (
+                    <img
+                      src={currentUser.photoURL || currentUser.avatarUrl}
+                      alt={currentUser.name}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : currentUser.name ? (
                     <span className="text-xs font-bold uppercase">
                       {currentUser.name.charAt(0)}
                     </span>
@@ -381,8 +388,17 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 font-bold flex items-center justify-center text-sm shrink-0 uppercase border border-indigo-100">
-                          {currentUser.name.charAt(0)}
+                        <div className="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 font-bold flex items-center justify-center text-sm shrink-0 uppercase border border-indigo-100 overflow-hidden">
+                          {currentUser.photoURL || currentUser.avatarUrl ? (
+                            <img
+                              src={currentUser.photoURL || currentUser.avatarUrl}
+                              alt={currentUser.name}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            currentUser.name.charAt(0)
+                          )}
                         </div>
                       </div>
 
