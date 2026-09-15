@@ -483,16 +483,14 @@ export const TopBanner: React.FC<TopBannerProps> = ({
                   {/* Brand Header */}
                   <div className="p-4 sm:p-5 flex items-center justify-between border-b border-slate-100">
                     <div className="flex items-center gap-3">
-                      {/* Stylized rounded logo icon */}
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4f46e5] to-[#8b5cf6] p-0.5 shadow-sm flex items-center justify-center shrink-0">
-                        <div className="w-full h-full bg-slate-900 rounded-[10px] flex items-center justify-center overflow-hidden">
-                          <img
-                            src="/logo.svg"
-                            alt="Host Bot Logo"
-                            className="w-6 h-6 object-contain"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
+                      {/* Stylized Host Bot logo icon */}
+                      <div className="w-9 h-9 rounded-xl overflow-hidden shadow-xs flex items-center justify-center shrink-0">
+                        <img
+                          src="/logo.svg"
+                          alt="Host Bot Logo"
+                          className="w-full h-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
                       </div>
                       <div>
                         <span className="font-extrabold text-slate-900 text-base tracking-tight font-sans block">

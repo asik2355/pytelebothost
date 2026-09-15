@@ -885,6 +885,7 @@ interface ServerRuntime {
   pollTimer: NodeJS.Timeout | null;
   isRemoteRunning: boolean;
   remoteDir: string;
+  remotePid: number | null;
   startTime: number | null;
   logs: BotLog[];
   logCounter: number;
@@ -1018,6 +1019,7 @@ function getServerRuntime(serverId: string): ServerRuntime {
       pollTimer: null,
       isRemoteRunning: false,
       remoteDir: `/home/container/${serverId}`,
+      remotePid: null,
       startTime: null,
       logs: [
         {
@@ -1312,9 +1314,9 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
         // Install on remote Freestyle VM directly
         (async () => {
           try {
-            await freestyleVm.exec(`mkdir -p "${remoteDir}"`);
-            await freestyleVm.fs.writeTextFile(`${remoteDir}/${reqFileName}`, reqContent);
-            const remotePip = await freestyleVm.exec(
+            await getVm().exec(`mkdir -p "${remoteDir}"`);
+            await getVm().fs.writeTextFile(`${remoteDir}/${reqFileName}`, reqContent);
+            const remotePip = await getVm().exec(
               `python3 -m pip install --no-cache-dir --prefer-binary --break-system-packages -r "${remoteDir}/${reqFileName}"`
             );
             if (remotePip.stdout) {
@@ -1346,9 +1348,9 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
       (async () => {
         try {
           const pkgContent = fs.readFileSync(path.join(sDir, pkgFileName), "utf-8");
-          await freestyleVm.exec(`mkdir -p "${remoteDir}"`);
-          await freestyleVm.fs.writeTextFile(`${remoteDir}/${pkgFileName}`, pkgContent);
-          const npmRes = await freestyleVm.exec(`cd "${remoteDir}" && npm install --prefer-offline --no-audit`);
+          await getVm().exec(`mkdir -p "${remoteDir}"`);
+          await getVm().fs.writeTextFile(`${remoteDir}/${pkgFileName}`, pkgContent);
+          const npmRes = await getVm().exec(`cd "${remoteDir}" && npm install --prefer-offline --no-audit`);
           if (npmRes.stdout) addServerLog(serverId, "stdout", npmRes.stdout.trim());
           addServerLog(serverId, "system", `✅ [Freestyle VPS] NPM packages installed.`);
           onComplete?.(true);
@@ -1363,7 +1365,7 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
     if (goModFileName) {
       (async () => {
         try {
-          await freestyleVm.exec(`cd "${remoteDir}" && go mod tidy`);
+          await getVm().exec(`cd "${remoteDir}" && go mod tidy`);
           onComplete?.(true);
         } catch {
           onComplete?.(true);
@@ -1392,8 +1394,23 @@ function killServerProcess(serverId: string) {
     runtime.isRemoteRunning = false;
   }
 
-  // Kill on Freestyle VM using process matching
-  freestyleVm.exec(`pkill -9 -f "${remoteDir}" || true; fuser -k -9 "${remoteDir}" 2>/dev/null || true`).catch(() => {});
+  // Kill on Freestyle VM using tracked remote PID, pid file, and cwd matching
+  if (runtime && runtime.remotePid) {
+    getVm().exec(`kill -9 ${runtime.remotePid} 2>/dev/null || true`).catch(() => {});
+    runtime.remotePid = null;
+  }
+  getVm().exec(`
+    if [ -f "${remoteDir}/server.pid" ]; then
+      kill -9 $(cat "${remoteDir}/server.pid") 2>/dev/null || true
+      rm -f "${remoteDir}/server.pid"
+    fi
+    pkill -9 -f "${remoteDir}" 2>/dev/null || true
+    for p in $(pgrep -f "python3|node"); do
+      if [ -e "/proc/$p/cwd" ] && [ "$(readlink -f /proc/$p/cwd 2>/dev/null)" = "${remoteDir}" ]; then
+        kill -9 $p 2>/dev/null || true
+      fi
+    done
+  `).catch(() => {});
 
   if (runtime && runtime.proc) {
     const pid = runtime.proc.pid;
@@ -1535,18 +1552,21 @@ app.post("/api/servers/action", (req, res) => {
         const exportPrefix = envExports.length > 0 ? `${envExports.join(" && ")} && ` : "";
 
         // 3. Clear old remote log file and launch process in background with nohup
-        await freestyleVm.exec(`mkdir -p "${remoteDir}" && rm -f "${remoteDir}/process.log"`);
+        await getVm().exec(`mkdir -p "${remoteDir}" && rm -f "${remoteDir}/process.log"`);
 
-        // Launch in background
-        const launchCommand = `cd "${remoteDir}" && ${exportPrefix}nohup ${cmdStr} > "${remoteDir}/process.log" 2>&1 & echo $!`;
-        const launchRes = await freestyleVm.exec(launchCommand);
+        // Launch in background, save PID to server.pid, and capture stdout
+        const launchCommand = `cd "${remoteDir}" && ${exportPrefix}nohup ${cmdStr} > "${remoteDir}/process.log" 2>&1 & echo $! > "${remoteDir}/server.pid" && cat "${remoteDir}/server.pid"`;
+        const launchRes = await getVm().exec(launchCommand);
+        const rawPid = (launchRes.stdout || "").trim().split("\n").pop() || "0";
+        const parsedPid = parseInt(rawPid, 10);
+        runtime.remotePid = parsedPid > 0 ? parsedPid : null;
         
         runtime.isRemoteRunning = true;
         runtime.startTime = Date.now();
         server.status = "RUNNING";
         enrichServerStats(server);
 
-        addServerLog(server.id, "system", `✅ Process successfully launched on Freestyle Cloud VM (${LIVE_FREESTYLE_EGRESS_IP})`);
+        addServerLog(server.id, "system", `✅ Process successfully launched on Freestyle Cloud VM (${LIVE_FREESTYLE_EGRESS_IP}) [PID: ${runtime.remotePid || "N/A"}]`);
 
         // 4. Stream and poll logs from Freestyle VM directly
         let lastLogLength = 0;
@@ -1559,7 +1579,7 @@ app.post("/api/servers/action", (req, res) => {
           }
 
           try {
-            const logRes = await freestyleVm.exec(`cat "${remoteDir}/process.log" 2>/dev/null || true`);
+            const logRes = await getVm().exec(`cat "${remoteDir}/process.log" 2>/dev/null || true`);
             if (logRes.stdout && logRes.stdout.length > lastLogLength) {
               const newContent = logRes.stdout.slice(lastLogLength);
               lastLogLength = logRes.stdout.length;
@@ -1572,11 +1592,37 @@ app.post("/api/servers/action", (req, res) => {
               }
             }
 
-            // Check if process is still alive on remote VM
-            const psCheck = await freestyleVm.exec(`ps aux | grep "${remoteDir}" | grep -v "grep" || true`);
-            if (!psCheck.stdout || psCheck.stdout.trim().length === 0) {
+            // Check if process is still alive on remote VM using PID, pid file, and cwd
+            let isAlive = false;
+            if (runtime.remotePid) {
+              const pidCheck = await getVm().exec(`kill -0 ${runtime.remotePid} 2>/dev/null && echo "ALIVE" || true`);
+              if (pidCheck.stdout && pidCheck.stdout.includes("ALIVE")) {
+                isAlive = true;
+              }
+            }
+
+            if (!isAlive) {
+              const pidFileCheck = await getVm().exec(`[ -f "${remoteDir}/server.pid" ] && kill -0 $(cat "${remoteDir}/server.pid") 2>/dev/null && echo "ALIVE_$(cat "${remoteDir}/server.pid")" || true`);
+              if (pidFileCheck.stdout && pidFileCheck.stdout.includes("ALIVE_")) {
+                isAlive = true;
+                const match = pidFileCheck.stdout.match(/ALIVE_(\d+)/);
+                if (match) runtime.remotePid = parseInt(match[1], 10);
+              }
+            }
+
+            if (!isAlive) {
+              const cwdCheck = await getVm().exec(`for p in $(pgrep -f "python3|node"); do [ -e "/proc/$p/cwd" ] && [ "$(readlink -f /proc/$p/cwd 2>/dev/null)" = "${remoteDir}" ] && echo "FOUND_$p" && break; done || true`);
+              if (cwdCheck.stdout && cwdCheck.stdout.includes("FOUND_")) {
+                isAlive = true;
+                const match = cwdCheck.stdout.match(/FOUND_(\d+)/);
+                if (match) runtime.remotePid = parseInt(match[1], 10);
+              }
+            }
+
+            if (!isAlive) {
               // Process exited on remote VM
               runtime.isRemoteRunning = false;
+              runtime.remotePid = null;
               if (runtime.pollTimer) clearInterval(runtime.pollTimer);
               runtime.pollTimer = null;
               server.status = "STOPPED";
@@ -1838,7 +1884,7 @@ app.post("/api/servers/:id/files/rename", async (req, res) => {
 
   try {
     fs.renameSync(oldPath, newPath);
-    await freestyleVm.exec(`mv "/home/container/${id}/${path.basename(oldName)}" "/home/container/${id}/${path.basename(newName)}" || true`);
+    await getVm().exec(`mv "/home/container/${id}/${path.basename(oldName)}" "/home/container/${id}/${path.basename(newName)}" || true`);
     addServerLog(id, "system", `✏️ Renamed on VPS: ${path.basename(oldName)} to ${path.basename(newName)}`);
     res.json({ success: true, name: path.basename(newName) });
   } catch (err: any) {
@@ -2222,7 +2268,7 @@ app.post("/api/cloud-vm/exec", async (req, res) => {
   const { command = "python3 --version" } = req.body;
 
   try {
-    const vmExecRes = await freestyleVm.exec(command);
+    const vmExecRes = await getVm().exec(command);
     const output = (vmExecRes.stdout || "") + (vmExecRes.stderr ? `\n${vmExecRes.stderr}` : "");
     res.json({
       success: true,
