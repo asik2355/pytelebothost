@@ -43,7 +43,11 @@ function formatAuthErrorMessage(err: any, lang: "bn" | "en"): string {
   if (
     code === "auth/invalid-credential" ||
     code === "auth/wrong-password" ||
-    code === "auth/user-not-found"
+    code === "auth/user-not-found" ||
+    code === "auth/invalid-email" ||
+    rawMsg.includes("invalid-credential") ||
+    rawMsg.includes("user-not-found") ||
+    rawMsg.includes("wrong-password")
   ) {
     return lang === "bn" ? "ইমেইল অথবা পাসওয়ার্ড সঠিক নয়।" : "Incorrect email or password.";
   }
@@ -66,10 +70,10 @@ function formatAuthErrorMessage(err: any, lang: "bn" | "en"): string {
       : "Too many failed attempts. Please try again later.";
   }
 
-  if (code === "auth/network-request-failed") {
+  if (code === "auth/network-request-failed" || rawMsg.toLowerCase().includes("failed to fetch")) {
     return lang === "bn"
-      ? "ইন্টারনেট কানেকশনে সমস্যা হচ্ছে। দয়া করে নেটওয়ার্ক চেক করুন।"
-      : "Network connection error. Please check your internet.";
+      ? "ইমেইল অথবা পাসওয়ার্ড সঠিক নয় বা সার্ভারে সংযোগ করা যায়নি।"
+      : "Invalid credentials or unable to reach auth server.";
   }
 
   // Strip raw "Firebase: Error (auth/...)" if present
@@ -193,33 +197,50 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
       try {
         loggedInUser = await loginWithEmailAuth(email.trim(), password);
       } catch (fbErr: any) {
-        // Fallback to server API if local server DB user
-        const res = await apiFetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-          }),
-        });
+        // If Firebase explicitly returned an authentication failure, throw it immediately
+        if (
+          fbErr.code === "auth/invalid-credential" ||
+          fbErr.code === "auth/wrong-password" ||
+          fbErr.code === "auth/user-not-found" ||
+          fbErr.code === "auth/invalid-email" ||
+          fbErr.code === "auth/user-disabled" ||
+          fbErr.code === "auth/too-many-requests"
+        ) {
+          throw fbErr;
+        }
 
-        const data = await res.json();
+        // Only try server API if Firebase failed for unexpected network or other reasons
+        try {
+          const res = await apiFetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: email.trim(),
+              password,
+            }),
+          });
 
-        if (res.ok && data.success && data.user) {
-          if (data.token) {
-            localStorage.setItem("vps_auth_token", data.token);
+          const data = await res.json();
+
+          if (res.ok && data.success && data.user) {
+            if (data.token) {
+              localStorage.setItem("vps_auth_token", data.token);
+            }
+
+            loggedInUser = {
+              id: data.user.id,
+              name: data.user.name,
+              email: data.user.email,
+              telegramUsername: data.user.telegramUsername,
+              role: data.user.role || "user",
+              balance: data.user.walletBalance ?? 0,
+              createdAt: data.user.createdAt || new Date().toISOString(),
+            };
+          } else {
+            throw fbErr;
           }
-
-          loggedInUser = {
-            id: data.user.id,
-            name: data.user.name,
-            email: data.user.email,
-            telegramUsername: data.user.telegramUsername,
-            role: data.user.role || "user",
-            balance: data.user.walletBalance ?? 0,
-            createdAt: data.user.createdAt || new Date().toISOString(),
-          };
-        } else {
+        } catch {
+          // If server fetch failed (e.g. static host without /api), rethrow original auth error
           throw fbErr;
         }
       }
@@ -301,39 +322,47 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
           telegramUsername.trim()
         );
       } catch (fbErr: any) {
-        if (fbErr.code === "auth/email-already-in-use") {
+        if (
+          fbErr.code === "auth/email-already-in-use" ||
+          fbErr.code === "auth/weak-password" ||
+          fbErr.code === "auth/invalid-email"
+        ) {
           throw fbErr;
         }
 
-        // Fallback to server API
-        const res = await apiFetch("/api/auth/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: name.trim(),
-            email: email.trim(),
-            password,
-            telegramUsername: telegramUsername.trim(),
-          }),
-        });
+        // Fallback to server API only if not a known client-side auth error
+        try {
+          const res = await apiFetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: name.trim(),
+              email: email.trim(),
+              password,
+              telegramUsername: telegramUsername.trim(),
+            }),
+          });
 
-        const data = await res.json();
+          const data = await res.json();
 
-        if (res.ok && data.success && data.user) {
-          if (data.token) {
-            localStorage.setItem("vps_auth_token", data.token);
+          if (res.ok && data.success && data.user) {
+            if (data.token) {
+              localStorage.setItem("vps_auth_token", data.token);
+            }
+
+            newUser = {
+              id: data.user.id,
+              name: data.user.name,
+              email: data.user.email,
+              telegramUsername: data.user.telegramUsername,
+              role: data.user.role || "user",
+              balance: 0,
+              createdAt: data.user.createdAt || new Date().toISOString(),
+            };
+          } else {
+            throw fbErr;
           }
-
-          newUser = {
-            id: data.user.id,
-            name: data.user.name,
-            email: data.user.email,
-            telegramUsername: data.user.telegramUsername,
-            role: data.user.role || "user",
-            balance: 0,
-            createdAt: data.user.createdAt || new Date().toISOString(),
-          };
-        } else {
+        } catch {
           throw fbErr;
         }
       }
