@@ -222,9 +222,24 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
 
       {/* 1. Header Section matching Screenshot 1 */}
       <div className="space-y-2 pt-1">
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-950 tracking-tight font-sans">
-          Dashboard
-        </h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-950 tracking-tight font-sans">
+            Dashboard
+          </h1>
+          {/* Official Host Bot Mascot Logo Badge */}
+          <div
+            onClick={() => onNavigate("/home")}
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden shadow-md shadow-sky-500/10 border border-slate-200/80 bg-slate-900 shrink-0 cursor-pointer hover:scale-105 transition-all"
+            title="Host Bot Cloud"
+          >
+            <img
+              src="/logo.svg"
+              alt="Host Bot Mascot Logo"
+              className="w-full h-full object-contain"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        </div>
         <p className="text-slate-500 text-sm sm:text-base font-normal leading-relaxed">
           {lang === "bn"
             ? "স্বাগতম। আপনার সার্ভিস এবং ক্লাউড সার্ভারগুলোর বর্তমান অবস্থা এখানে প্রদর্শিত হচ্ছে।"

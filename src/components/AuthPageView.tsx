@@ -224,7 +224,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
         <div className="flex flex-col items-center justify-center text-center mb-6">
           <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-lg shadow-indigo-500/20 flex items-center justify-center mb-2.5">
             <img
-              src="/logo.svg"
+              src="/logo.svg?v=3"
               alt="Host Bot Logo"
               className="w-full h-full object-contain"
               referrerPolicy="no-referrer"
