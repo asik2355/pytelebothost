@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import React, { useState, useEffect } from "react";
 import {
   Minus,
@@ -65,7 +66,7 @@ export const BillingPageView: React.FC<BillingPageViewProps> = ({
     try {
       const token = localStorage.getItem("vps_auth_token") || "";
       const query = currentUser ? `?userId=${encodeURIComponent(currentUser.id)}` : "";
-      const res = await fetch(`/api/billing/wallet${query}`, {
+      const res = await apiFetch(`/api/billing/wallet${query}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (res.ok) {
@@ -127,7 +128,7 @@ export const BillingPageView: React.FC<BillingPageViewProps> = ({
     setIsPaying(true);
     try {
       const token = localStorage.getItem("vps_auth_token") || "";
-      const res = await fetch("/api/billing/recharge", {
+      const res = await apiFetch("/api/billing/recharge", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",

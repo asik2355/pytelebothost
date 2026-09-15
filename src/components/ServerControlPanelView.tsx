@@ -161,7 +161,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   // Fetch per-server details & config
   const fetchServerDetails = async () => {
     try {
-      const res = await fetch(`/api/servers/${server.id}/details`);
+      const res = await apiFetch(`/api/servers/${server.id}/details`);
       if (res.ok) {
         const data = await res.json();
         if (data.server) {
@@ -188,7 +188,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   // Fetch per-server logs
   const fetchLogs = async () => {
     try {
-      const res = await fetch(`/api/servers/${server.id}/logs`);
+      const res = await apiFetch(`/api/servers/${server.id}/logs`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.logs)) {
@@ -204,7 +204,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const fetchFiles = async (silent = false) => {
     if (!silent) setIsRefreshingFiles(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/files`);
+      const res = await apiFetch(`/api/servers/${server.id}/files`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.files)) {
@@ -226,7 +226,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
   const loadFileContent = async (filename: string) => {
     try {
-      const res = await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(filename)}`);
+      const res = await apiFetch(`/api/servers/${server.id}/files/${encodeURIComponent(filename)}`);
       if (res.ok) {
         const data = await res.json();
         setFileContent(data.content ?? "");
@@ -308,7 +308,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     setLogs((prev) => [...prev, newLog]);
 
     try {
-      const res = await fetch(`/api/servers/${server.id}/command`, {
+      const res = await apiFetch(`/api/servers/${server.id}/command`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: cmd }),
@@ -327,7 +327,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const handleInstallDependencies = async () => {
     setIsInstallingDeps(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/install`, { method: "POST" });
+      const res = await apiFetch(`/api/servers/${server.id}/install`, { method: "POST" });
       if (res.ok) {
         onAddNotification?.({
           id: `install-${Date.now()}`,
@@ -351,7 +351,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     setIsSavingFile(true);
     const isReqs = selectedFile === "requirements.txt" || selectedFile === "package.json";
     try {
-      const res = await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(selectedFile)}`, {
+      const res = await apiFetch(`/api/servers/${server.id}/files/${encodeURIComponent(selectedFile)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: fileContent }),
@@ -397,7 +397,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     const filename = fileToDelete;
     setIsDeletingFile(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(filename)}`, {
+      const res = await apiFetch(`/api/servers/${server.id}/files/${encodeURIComponent(filename)}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -443,7 +443,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     }
 
     try {
-      const res = await fetch(`/api/servers/${server.id}/files/upload`, {
+      const res = await apiFetch(`/api/servers/${server.id}/files/upload`, {
         method: "POST",
         body: formData,
       });
@@ -485,7 +485,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     const cleanName = newFileName.trim();
 
     try {
-      await fetch(`/api/servers/${server.id}/files/${encodeURIComponent(cleanName)}`, {
+      await apiFetch(`/api/servers/${server.id}/files/${encodeURIComponent(cleanName)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: `# New file for ${server.name}\n` }),
@@ -507,7 +507,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     const cleanName = newDirName.trim();
 
     try {
-      const res = await fetch(`/api/servers/${server.id}/directories`, {
+      const res = await apiFetch(`/api/servers/${server.id}/directories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dirName: cleanName }),
@@ -536,7 +536,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     e.preventDefault();
     if (!renameNewName.trim() || !renameOldName) return;
     try {
-      const res = await fetch(`/api/servers/${server.id}/files/rename`, {
+      const res = await apiFetch(`/api/servers/${server.id}/files/rename`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ oldName: renameOldName, newName: renameNewName.trim() }),
@@ -557,7 +557,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
   const handleDownloadFile = (filename: string) => {
     const filePath = `/api/servers/${server.id}/files/${encodeURIComponent(filename)}`;
-    fetch(filePath)
+    apiFetch(filePath)
       .then((r) => r.json())
       .then((data) => {
         if (data.content !== undefined) {
@@ -575,7 +575,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   // Backups Handlers
   const fetchBackups = async () => {
     try {
-      const res = await fetch(`/api/servers/${server.id}/backups`);
+      const res = await apiFetch(`/api/servers/${server.id}/backups`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.backups)) setBackups(data.backups);
@@ -588,7 +588,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const handleCreateBackup = async () => {
     setIsCreatingBackup(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/backups`, {
+      const res = await apiFetch(`/api/servers/${server.id}/backups`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
@@ -615,7 +615,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     if (!confirm(lang === "bn" ? `আপনি কি ব্যাকআপ ${backupId} রিস্টোর করতে চান?` : `Restore server workspace to snapshot ${backupId}?`)) return;
     setIsRestoringBackup(backupId);
     try {
-      const res = await fetch(`/api/servers/${server.id}/backups/${backupId}/restore`, {
+      const res = await apiFetch(`/api/servers/${server.id}/backups/${backupId}/restore`, {
         method: "POST",
       });
       if (res.ok) {
@@ -640,7 +640,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const handleDeleteBackup = async (backupId: string) => {
     if (!confirm(lang === "bn" ? `ব্যাকআপ মুছে ফেলতে চান?` : `Delete backup ${backupId}?`)) return;
     try {
-      const res = await fetch(`/api/servers/${server.id}/backups/${backupId}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/servers/${server.id}/backups/${backupId}`, { method: "DELETE" });
       if (res.ok) {
         await fetchBackups();
       }
@@ -658,7 +658,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
   const handleClearLogs = async () => {
     try {
-      await fetch(`/api/servers/${server.id}/logs/clear`, { method: "POST" });
+      await apiFetch(`/api/servers/${server.id}/logs/clear`, { method: "POST" });
       setLogs([]);
     } catch {
       // ignore
@@ -668,7 +668,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const handleSaveStartup = async () => {
     setIsSavingStartup(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/config`, {
+      const res = await apiFetch(`/api/servers/${server.id}/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -697,7 +697,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/config`, {
+      const res = await apiFetch(`/api/servers/${server.id}/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: serverNameInput }),
@@ -729,7 +729,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
     setIsReinstalling(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/reinstall`, { method: "POST" });
+      const res = await apiFetch(`/api/servers/${server.id}/reinstall`, { method: "POST" });
       if (res.ok) {
         await fetchFiles();
         await fetchLogs();

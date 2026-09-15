@@ -97,6 +97,13 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     headers.set("x-vps-api-secret", secret);
   }
 
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("vps_auth_token");
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  }
+
   return fetch(url, {
     ...options,
     headers,

@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import React, { useState } from "react";
 import {
   Calendar,
@@ -457,7 +458,7 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
                 else if (action === "start") onStartBot();
                 else if (action === "restart") onRestartBot?.();
               }
-              await fetch("/api/servers/action", {
+              await apiFetch("/api/servers/action", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ serverId: srv.id, action }),
@@ -479,7 +480,7 @@ export const HomePageView: React.FC<HomePageViewProps> = ({
 
             setServerActionLoading(srvId);
             try {
-              const res = await fetch(`/api/servers/${srvId}`, {
+              const res = await apiFetch(`/api/servers/${srvId}`, {
                 method: "DELETE",
               });
               if (res.ok) {

@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import React, { useState } from "react";
 import {
   Search,
@@ -86,7 +87,7 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
   const handleServerAction = async (serverId: string, action: "start" | "stop" | "restart") => {
     setActionLoadingId(serverId);
     try {
-      const res = await fetch("/api/servers/action", {
+      const res = await apiFetch("/api/servers/action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serverId, action }),
@@ -123,7 +124,7 @@ export const MyServersPageView: React.FC<MyServersPageViewProps> = ({
 
     setActionLoadingId(serverId);
     try {
-      const res = await fetch(`/api/servers/${serverId}`, {
+      const res = await apiFetch(`/api/servers/${serverId}`, {
         method: "DELETE",
       });
       if (res.ok) {

@@ -260,7 +260,7 @@ export default function App() {
     if (!currentUser) return;
     try {
       const token = localStorage.getItem("vps_auth_token") || "";
-      const res = await fetch(`/api/billing/wallet?userId=${encodeURIComponent(currentUser.id)}`, {
+      const res = await apiFetch(`/api/billing/wallet?userId=${encodeURIComponent(currentUser.id)}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (res.ok) {
@@ -281,7 +281,7 @@ export default function App() {
     }
     try {
       const token = localStorage.getItem("vps_auth_token") || "";
-      const res = await fetch(`/api/servers?userId=${encodeURIComponent(currentUser.id)}`, {
+      const res = await apiFetch(`/api/servers?userId=${encodeURIComponent(currentUser.id)}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (res.ok) {
@@ -340,7 +340,7 @@ export default function App() {
 
   const fetchWorkspace = useCallback(async () => {
     try {
-      const res = await fetch("/api/workspace");
+      const res = await apiFetch("/api/workspace");
       if (res.ok) {
         const data: WorkspaceStatus = await res.json();
         setStatus(data);
@@ -358,7 +358,7 @@ export default function App() {
   // Fetch Current Token from .env
   const fetchCurrentToken = useCallback(async () => {
     try {
-      const res = await fetch("/api/workspace/file?name=.env");
+      const res = await apiFetch("/api/workspace/file?name=.env");
       if (res.ok) {
         const data = await res.json();
         const content = data.content || "";
@@ -385,7 +385,7 @@ export default function App() {
     const t = testToken || token;
     if (!t) return null;
     try {
-      const res = await fetch("/api/bot/test-token", {
+      const res = await apiFetch("/api/bot/test-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: t }),
@@ -408,7 +408,7 @@ export default function App() {
   const saveToken = async (newToken: string): Promise<boolean> => {
     try {
       // Get current env
-      const resEnv = await fetch("/api/workspace/file?name=.env");
+      const resEnv = await apiFetch("/api/workspace/file?name=.env");
       let currentLines: string[] = [];
       if (resEnv.ok) {
         const data = await resEnv.json();
@@ -426,7 +426,7 @@ export default function App() {
         updatedLines.push(`BOT_TOKEN=${newToken}`);
       }
 
-      await fetch("/api/workspace/file", {
+      await apiFetch("/api/workspace/file", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: ".env", content: updatedLines.join("\n") }),
@@ -518,7 +518,7 @@ export default function App() {
     }
     setIsActionLoading(true);
     try {
-      const res = await fetch("/api/bot/start", {
+      const res = await apiFetch("/api/bot/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entryFile: status?.currentEntryFile || "bot.py" }),
@@ -555,7 +555,7 @@ export default function App() {
 
     setIsActionLoading(true);
     try {
-      const res = await fetch("/api/bot/stop", { method: "POST" });
+      const res = await apiFetch("/api/bot/stop", { method: "POST" });
       fetchWorkspace();
       if (res.ok) {
         handleAddNotification({
@@ -588,7 +588,7 @@ export default function App() {
 
     setIsActionLoading(true);
     try {
-      await fetch("/api/bot/restart", { method: "POST" });
+      await apiFetch("/api/bot/restart", { method: "POST" });
       fetchWorkspace();
     } finally {
       setIsActionLoading(false);
@@ -598,7 +598,7 @@ export default function App() {
   const handleInstallReqs = async () => {
     setIsActionLoading(true);
     try {
-      await fetch("/api/bot/install", { method: "POST" });
+      await apiFetch("/api/bot/install", { method: "POST" });
       fetchWorkspace();
     } finally {
       setIsActionLoading(false);
@@ -607,7 +607,7 @@ export default function App() {
 
   const handleClearLogs = async () => {
     try {
-      await fetch("/api/bot/logs/clear", { method: "POST" });
+      await apiFetch("/api/bot/logs/clear", { method: "POST" });
       setLogs([]);
     } catch {
       // ignore
@@ -616,7 +616,7 @@ export default function App() {
 
   const handleSelectEntryFile = async (filename: string) => {
     try {
-      await fetch("/api/bot/entry", {
+      await apiFetch("/api/bot/entry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entryFile: filename }),
@@ -629,7 +629,7 @@ export default function App() {
 
   const handleLoadTemplate = async (templateId: string) => {
     try {
-      await fetch("/api/bot/template", {
+      await apiFetch("/api/bot/template", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ templateId }),
@@ -661,7 +661,7 @@ export default function App() {
   const handleServerAction = async (serverId: string, action: "start" | "stop" | "restart") => {
     setIsActionLoading(true);
     try {
-      const res = await fetch("/api/servers/action", {
+      const res = await apiFetch("/api/servers/action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serverId, action }),
@@ -696,7 +696,7 @@ export default function App() {
 
     setIsActionLoading(true);
     try {
-      const res = await fetch(`/api/servers/${serverId}`, {
+      const res = await apiFetch(`/api/servers/${serverId}`, {
         method: "DELETE",
       });
       if (res.ok) {

@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import React, { useState } from "react";
 import { X, Check, Loader2, AlertCircle, ArrowUpRight } from "lucide-react";
 import { ServerCategory, ActiveServer, AppNotification } from "../types";
@@ -82,7 +83,7 @@ export const PurchasePlanModal: React.FC<PurchasePlanModalProps> = ({
           if (ud) userId = JSON.parse(ud).id;
         } catch {}
 
-        const res = await fetch("/api/servers/create", {
+        const res = await apiFetch("/api/servers/create", {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",
