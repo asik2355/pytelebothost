@@ -75,14 +75,25 @@ export const PurchasePlanModal: React.FC<PurchasePlanModalProps> = ({
       let updatedBalance = Math.max(0, walletBalance - price);
 
       try {
+        const token = localStorage.getItem("vps_auth_token") || "";
+        let userId = null;
+        try {
+          const ud = localStorage.getItem("hostbot_auth_user");
+          if (ud) userId = JSON.parse(ud).id;
+        } catch {}
+
         const res = await fetch("/api/servers/create", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
           body: JSON.stringify({
             name: finalName,
             category: selectedCategory,
             planName: currentPlan.name,
             price: price,
+            userId: userId
           }),
         });
 

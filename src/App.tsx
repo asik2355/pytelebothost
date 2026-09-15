@@ -259,7 +259,10 @@ export default function App() {
   const fetchWallet = useCallback(async () => {
     if (!currentUser) return;
     try {
-      const res = await fetch("/api/billing/wallet");
+      const token = localStorage.getItem("vps_auth_token") || "";
+      const res = await fetch(`/api/billing/wallet?userId=${encodeURIComponent(currentUser.id)}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
         if (typeof data.balance === "number") {
@@ -277,7 +280,10 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch("/api/servers");
+      const token = localStorage.getItem("vps_auth_token") || "";
+      const res = await fetch(`/api/servers?userId=${encodeURIComponent(currentUser.id)}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.servers)) {

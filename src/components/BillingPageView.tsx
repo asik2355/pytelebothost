@@ -63,7 +63,11 @@ export const BillingPageView: React.FC<BillingPageViewProps> = ({
 
   const fetchWallet = async () => {
     try {
-      const res = await fetch("/api/billing/wallet");
+      const token = localStorage.getItem("vps_auth_token") || "";
+      const query = currentUser ? `?userId=${encodeURIComponent(currentUser.id)}` : "";
+      const res = await fetch(`/api/billing/wallet${query}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
         setWallet(data);
@@ -122,12 +126,17 @@ export const BillingPageView: React.FC<BillingPageViewProps> = ({
 
     setIsPaying(true);
     try {
+      const token = localStorage.getItem("vps_auth_token") || "";
       const res = await fetch("/api/billing/recharge", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({
           amount: rechargeAmount,
           method: selectedMethod,
+          userId: currentUser.id,
         }),
       });
       const data = await res.json();

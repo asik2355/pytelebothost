@@ -1312,10 +1312,12 @@ interface WalletData {
   }>;
 }
 
-function getWalletData(): WalletData {
+function getWalletData(userId?: string): WalletData {
+  const safeId = userId || "guest";
+  const wFile = path.join(WORKSPACE_DIR, `.wallet_${safeId}.json`);
   try {
-    if (fs.existsSync(WALLET_FILE)) {
-      const data = fs.readFileSync(WALLET_FILE, "utf-8");
+    if (fs.existsSync(wFile)) {
+      const data = fs.readFileSync(wFile, "utf-8");
       return JSON.parse(data);
     }
   } catch {
@@ -1326,33 +1328,54 @@ function getWalletData(): WalletData {
     currency: "৳",
     transactions: [],
   };
-  saveWalletData(initialWallet);
+  saveWalletData(userId, initialWallet);
   return initialWallet;
 }
 
-function saveWalletData(data: WalletData) {
+function saveWalletData(userId: string | undefined, data: WalletData) {
+  const safeId = userId || "guest";
+  const wFile = path.join(WORKSPACE_DIR, `.wallet_${safeId}.json`);
   try {
-    fs.writeFileSync(WALLET_FILE, JSON.stringify(data, null, 2), "utf-8");
+    fs.writeFileSync(wFile, JSON.stringify(data, null, 2), "utf-8");
   } catch (err) {
     console.error("Failed to save wallet data", err);
   }
 }
 
-app.get("/api/billing/wallet", (req, res) => {
-  const wallet = getWalletData();
+app.get("/api/billing/wallet", async (req, res) => {
+  const userId = req.query.userId as string;
+  const wallet = getWalletData(userId);
+  if (userId) {
+     const user = await findUserByIdInFirestore(userId);
+     if (user) {
+        wallet.balance = user.walletBalance || 0;
+     }
+  }
   res.json(wallet);
 });
 
-app.post("/api/billing/recharge", (req, res) => {
-  const { amount, method } = req.body;
+app.post("/api/billing/recharge", async (req, res) => {
+  const { amount, method, userId } = req.body;
   const numAmount = parseFloat(amount);
   if (isNaN(numAmount) || numAmount <= 0) {
     return res.status(400).json({ error: "Invalid recharge amount" });
   }
 
-  const wallet = getWalletData();
+  let currentBalance = 0;
+  if (userId) {
+    const user = await findUserByIdInFirestore(userId);
+    if (user) {
+      user.walletBalance = Math.round(((user.walletBalance || 0) + numAmount) * 100) / 100;
+      await saveUserToFirestore(user);
+      currentBalance = user.walletBalance;
+    } else {
+      currentBalance = numAmount;
+    }
+  }
+
+  const wallet = getWalletData(userId);
   const txId = `TX-${Date.now().toString().slice(-6)}`;
-  wallet.balance = Math.round((wallet.balance + numAmount) * 100) / 100;
+  wallet.balance = currentBalance || Math.round((wallet.balance + numAmount) * 100) / 100;
   wallet.transactions.unshift({
     id: txId,
     amount: numAmount,
@@ -1363,7 +1386,7 @@ app.post("/api/billing/recharge", (req, res) => {
     method: method || "Instant Pay",
   });
 
-  saveWalletData(wallet);
+  saveWalletData(userId, wallet);
   addLog("system", `💳 Wallet balance recharged by ৳${numAmount.toFixed(2)}. New balance: ৳${wallet.balance.toFixed(2)}`);
 
   res.json({
@@ -1384,6 +1407,7 @@ if (!fs.existsSync(USER_SERVERS_DIR)) {
 
 interface ServerRecord {
   id: string;
+  userId?: string;
   name: string;
   category: string;
   region: string;
@@ -1699,7 +1723,15 @@ initAllWorkspaces();
 
 // 1. Get All Servers
 app.get("/api/servers", (req, res) => {
-  const servers = getServersData();
+  const userId = req.query.userId as string;
+  let servers = getServersData();
+  
+  if (userId) {
+    servers = servers.filter((s) => s.userId === userId);
+  } else {
+    servers = servers.filter((s) => !s.userId || s.userId === "guest");
+  }
+
   // enrich with port and config
   for (const s of servers) {
     const cfg = getServerConfig(s.id, s);
@@ -1713,25 +1745,43 @@ app.get("/api/servers", (req, res) => {
 });
 
 // 2. Create Server
-app.post("/api/servers/create", (req, res) => {
-  const { name, category, planName, price } = req.body;
+app.post("/api/servers/create", async (req, res) => {
+  const { name, category, planName, price, userId } = req.body;
   const serverName = (name || "").trim() || "Bot Server";
   const serverCategory = (category || "").trim() || "python3";
   const numPrice = typeof price === "number" ? price : parseFloat(price) || 100;
 
-  const wallet = getWalletData();
+  let currentBalance = 0;
+  let userObj: VpsUserRecord | null = null;
 
-  if (numPrice > 0 && wallet.balance < numPrice) {
+  if (userId) {
+    userObj = await findUserByIdInFirestore(userId);
+    if (userObj) {
+      currentBalance = userObj.walletBalance || 0;
+    }
+  } else {
+    const wallet = getWalletData();
+    currentBalance = wallet.balance;
+  }
+
+  if (numPrice > 0 && currentBalance < numPrice) {
     return res.status(400).json({
-      error: `Insufficient balance (Balance: ৳${wallet.balance.toFixed(2)}, Required: ৳${numPrice.toFixed(2)})`,
-      balance: wallet.balance,
+      error: `Insufficient balance (Balance: ৳${currentBalance.toFixed(2)}, Required: ৳${numPrice.toFixed(2)})`,
+      balance: currentBalance,
       required: numPrice,
     });
   }
 
   // Deduct from wallet if paid plan
   if (numPrice > 0) {
-    wallet.balance = Math.round((wallet.balance - numPrice) * 100) / 100;
+    if (userObj) {
+      userObj.walletBalance = Math.round((currentBalance - numPrice) * 100) / 100;
+      await saveUserToFirestore(userObj);
+      currentBalance = userObj.walletBalance;
+    }
+    
+    const wallet = getWalletData(userId);
+    wallet.balance = currentBalance || Math.round((wallet.balance - numPrice) * 100) / 100;
     wallet.transactions.unshift({
       id: `TX-${Date.now().toString().slice(-6)}`,
       amount: numPrice,
@@ -1741,7 +1791,7 @@ app.post("/api/servers/create", (req, res) => {
       status: "completed",
       method: "Wallet Balance",
     });
-    saveWalletData(wallet);
+    saveWalletData(userId, wallet);
   }
 
   const hexHash = Math.random().toString(16).substring(2, 10);
@@ -1750,6 +1800,7 @@ app.post("/api/servers/create", (req, res) => {
 
   const newServer: ServerRecord = {
     id: serverId,
+    userId: userId || "guest",
     name: serverName,
     category: serverCategory,
     region: `EU • ${hexHash}`,
