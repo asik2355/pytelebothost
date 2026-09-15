@@ -77,6 +77,16 @@ export const BillingPageView: React.FC<BillingPageViewProps> = ({
     fetchWallet();
   }, []);
 
+  // Synchronize wallet balance dynamically with currentUser balance
+  useEffect(() => {
+    if (currentUser && typeof currentUser.balance === "number") {
+      setWallet((prev) => ({
+        ...prev,
+        balance: currentUser.balance ?? prev.balance,
+      }));
+    }
+  }, [currentUser?.balance]);
+
   const handleAmountChange = (val: number) => {
     const clamped = Math.max(0, val);
     setRechargeAmount(clamped);

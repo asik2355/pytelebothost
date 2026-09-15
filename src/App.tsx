@@ -12,7 +12,13 @@ import { ServerControlPanelView } from "./components/ServerControlPanelView";
 import { AuthPageView } from "./components/AuthPageView";
 import { WorkspaceStatus, BotLog, TelegramBotProfile, AppNotification, ActiveServer, AuthUser } from "./types";
 import { apiFetch } from "./lib/api";
-import { subscribeToFirebaseAuthState, logoutFirebaseAuth } from "./lib/firebase";
+import {
+  subscribeToFirebaseAuthState,
+  logoutFirebaseAuth,
+  subscribeToUserServers,
+  syncServerToCloud,
+  deleteServerFromCloud,
+} from "./lib/firebase";
 
 export default function App() {
   const [lang, setLang] = useState<"bn" | "en">("en");
@@ -283,13 +289,48 @@ export default function App() {
     }
   }, [currentUser]);
 
-  const handleServerCreated = useCallback((newServer: ActiveServer) => {
-    setServers((prev) => {
-      const exists = prev.some((s) => s.id === newServer.id);
-      if (exists) return prev.map((s) => (s.id === newServer.id ? newServer : s));
-      return [...prev, newServer];
+  // Subscribe to User Servers from Cloud Database (syncs seamlessly across all phones & devices)
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setServers([]);
+      return;
+    }
+
+    const unsubCloudServers = subscribeToUserServers(currentUser.id, (cloudServers) => {
+      if (cloudServers && cloudServers.length > 0) {
+        setServers((prev) => {
+          // Merge cloud servers with any local servers
+          const merged = [...cloudServers];
+          for (const s of prev) {
+            if (!merged.some((m) => m.id === s.id)) {
+              merged.push(s);
+            }
+          }
+          return merged;
+        });
+      }
     });
-  }, []);
+
+    return () => {
+      unsubCloudServers();
+    };
+  }, [currentUser?.id]);
+
+  const handleServerCreated = useCallback(
+    (newServer: ActiveServer) => {
+      setServers((prev) => {
+        const exists = prev.some((s) => s.id === newServer.id);
+        if (exists) return prev.map((s) => (s.id === newServer.id ? newServer : s));
+        return [...prev, newServer];
+      });
+
+      // Synchronize to cloud database so all other devices immediately show this server
+      if (currentUser?.id) {
+        syncServerToCloud(newServer, currentUser.id);
+      }
+    },
+    [currentUser?.id]
+  );
 
   const fetchWorkspace = useCallback(async () => {
     try {

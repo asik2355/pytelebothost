@@ -20,8 +20,12 @@ import {
   updateDoc,
   serverTimestamp,
   Firestore,
+  onSnapshot,
+  collection,
+  query,
+  where,
 } from "firebase/firestore";
-import { AuthUser } from "../types";
+import { AuthUser, ActiveServer } from "../types";
 
 // Firebase Client Configuration
 // Supports either a single FIREBASE_JSON_KEY / FIREBASE_WEB_CONFIG (entire JSON) or individual keys
@@ -296,23 +300,136 @@ export async function logoutFirebaseAuth(): Promise<void> {
 export function subscribeToFirebaseAuthState(
   callback: (user: AuthUser | null, loading: boolean) => void
 ): () => void {
-  return onAuthStateChanged(auth, async (fbUser) => {
+  let userDocUnsub: (() => void) | null = null;
+
+  const authUnsub = onAuthStateChanged(auth, async (fbUser) => {
+    if (userDocUnsub) {
+      userDocUnsub();
+      userDocUnsub = null;
+    }
+
     if (!fbUser) {
       callback(null, false);
       return;
     }
 
+    // Immediately return initial auth user
+    callback(mapToAuthUser(fbUser), true);
+
     try {
       const userDocRef = doc(db, "users", fbUser.uid);
-      const snap = await getDoc(userDocRef);
-      if (snap.exists()) {
-        const data = snap.data();
-        callback(mapToAuthUser(fbUser, data), false);
-      } else {
-        callback(mapToAuthUser(fbUser), false);
-      }
+      // Real-time listener: Any change to balance from ANY device or admin will instantly update in all phones!
+      userDocUnsub = onSnapshot(
+        userDocRef,
+        (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            callback(mapToAuthUser(fbUser, data), false);
+          } else {
+            callback(mapToAuthUser(fbUser), false);
+          }
+        },
+        (error) => {
+          console.warn("User doc listener warning:", error.message);
+          callback(mapToAuthUser(fbUser), false);
+        }
+      );
     } catch (e) {
       callback(mapToAuthUser(fbUser), false);
     }
   });
+
+  return () => {
+    if (userDocUnsub) userDocUnsub();
+    authUnsub();
+  };
 }
+
+/**
+ * 7. Real-Time Cloud Server Sync across all devices
+ */
+export function subscribeToUserServers(
+  userId: string,
+  callback: (servers: ActiveServer[]) => void
+): () => void {
+  if (!userId) {
+    callback([]);
+    return () => {};
+  }
+
+  try {
+    const serversCol = collection(db, "servers");
+    const q = query(serversCol, where("userId", "==", userId));
+
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const cloudServers: ActiveServer[] = [];
+        snapshot.forEach((d) => {
+          const sData = d.data();
+          cloudServers.push({
+            id: sData.id || d.id,
+            name: sData.name || "Server",
+            category: sData.category || "python3",
+            region: sData.region || "EU • Cloud",
+            status: sData.status || "STOPPED",
+            ramUsage: sData.ramUsage || "0.00 MB",
+            cpuUsage: sData.cpuUsage || "0.00%",
+            diskUsage: sData.diskUsage || "0.00 MB",
+            daysLeft: sData.daysLeft || "30d left",
+            planName: sData.planName || "Mini-v1",
+            planPrice: sData.planPrice || 100,
+            createdAt: sData.createdAt || new Date().toISOString(),
+            port: sData.port,
+            ip: sData.ip || "194.163.148.91",
+            startupCommand: sData.startupCommand,
+            envVars: sData.envVars,
+          });
+        });
+        callback(cloudServers);
+      },
+      (err) => {
+        console.warn("Servers sync listener notice:", err.message);
+      }
+    );
+  } catch (err: any) {
+    console.warn("subscribeToUserServers err:", err.message);
+    return () => {};
+  }
+}
+
+/**
+ * Save / Update server in Firestore so all devices see the same server
+ */
+export async function syncServerToCloud(server: ActiveServer, userId: string): Promise<void> {
+  if (!userId || !server.id) return;
+  try {
+    const sDocRef = doc(db, "servers", server.id);
+    await setDoc(
+      sDocRef,
+      {
+        ...server,
+        userId,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (e: any) {
+    console.warn("syncServerToCloud notice:", e.message);
+  }
+}
+
+/**
+ * Delete server from Firestore so it disappears on all devices
+ */
+export async function deleteServerFromCloud(serverId: string): Promise<void> {
+  if (!serverId) return;
+  try {
+    const sDocRef = doc(db, "servers", serverId);
+    // Soft delete or set deleted flag if security rules restrict delete
+    await setDoc(sDocRef, { deleted: true }, { merge: true });
+  } catch (e: any) {
+    console.warn("deleteServerFromCloud notice:", e.message);
+  }
+}
+
