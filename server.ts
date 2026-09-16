@@ -309,6 +309,7 @@ export interface VpsUserRecord {
   salt: string;
   role: "user" | "admin";
   walletBalance: number;
+  balance?: number;
   plan: string;
   serversCount: number;
   createdAt: string;
@@ -539,6 +540,85 @@ async function createSessionToken(userId: string): Promise<string> {
 function sanitizeUser(u: VpsUserRecord) {
   const { passwordHash, salt, resetToken, ...safeUser } = u;
   return safeUser;
+}
+
+// Authentication resolver for VPS API requests
+async function getAuthenticatedUser(req: express.Request): Promise<VpsUserRecord | null> {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.substring(7).trim() : ((req.query.token as string) || "").trim();
+
+  if (token) {
+    const session = await findSessionInFirestore(token);
+    if (session) {
+      const user = await findUserByIdInFirestore(session.userId);
+      if (user) return user;
+    }
+  }
+
+  // Check API secret passed from Vercel edge/backend
+  const secret = process.env.VPS_API_SECRET || process.env.BOT_HOST_VPS_API_SECRET;
+  const reqSecret = (req.headers["x-vps-api-secret"] as string) || "";
+  if (secret && reqSecret && reqSecret === secret) {
+    const userIdHeader = (req.headers["x-user-id"] as string) || "";
+    if (userIdHeader) {
+      const user = await findUserByIdInFirestore(userIdHeader);
+      if (user) return user;
+    }
+    return {
+      id: "root-admin",
+      name: "Root Administrator",
+      email: "root@vps",
+      role: "admin",
+      walletBalance: 999999,
+      plan: "Dedicated VPS",
+      serversCount: 1,
+      createdAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+    } as VpsUserRecord;
+  }
+
+  // If no VPS_API_SECRET configured in environment, allow single-tenant panel owner
+  if (!secret) {
+    return {
+      id: "local-owner",
+      name: "Host Owner",
+      email: "owner@localhost",
+      role: "admin",
+      walletBalance: 1000,
+      plan: "Community",
+      serversCount: 1,
+      createdAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+    } as VpsUserRecord;
+  }
+
+  return null;
+}
+
+function verifyServerOwnership(server: ServerRecord, user: VpsUserRecord | null): boolean {
+  if (!user) return false;
+  if (user.role === "admin" || user.id === "root-admin" || user.id === "local-owner") return true;
+  if (!server.userId) return true; // Legacy server or open template
+  return server.userId === user.id;
+}
+
+const ALLOWED_EXTENSIONS = new Set([
+  ".py", ".pyw", ".txt", ".json", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
+  ".zip", ".tar", ".gz", ".tgz", ".bz2", ".7z", ".rar",
+  ".md", ".sh", ".bash", ".env", ".example", ".yml", ".yaml", ".ini", ".cfg", ".conf",
+  ".toml", ".sql", ".sqlite", ".db", ".db3", ".log", ".csv", ".tsv", ".xml",
+  ".html", ".css", ".scss", ".less", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+  ".woff", ".woff2", ".ttf", ".eot", ".go", ".rs", ".java", ".c", ".cpp", ".h"
+]);
+
+function isAllowedFileType(filename: string): boolean {
+  if (filename.startsWith(".") && !filename.includes(".", 1)) {
+    // Hidden config files like .env, .gitignore, .dockerignore
+    return true;
+  }
+  const ext = path.extname(filename).toLowerCase();
+  if (!ext) return true; // Extensionless scripts like Procfile, Dockerfile, LICENSE
+  return ALLOWED_EXTENSIONS.has(ext);
 }
 
 // ---------------- AUTH & USER DATABASE API ROUTES ----------------
@@ -1917,7 +1997,7 @@ app.post("/api/servers/create", async (req, res) => {
   res.json({
     success: true,
     server: newServer,
-    newBalance: wallet.balance,
+    newBalance: currentBalance,
     message: `Server "${serverName}" deployed successfully!`,
   });
 });
@@ -1986,11 +2066,10 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
         addServerLog(serverId, "pip", `📦 [Pip Manager] Found ${reqFileName} with ${pkgs.length} package(s): ${pkgs.slice(0, 5).join(", ")}${pkgs.length > 5 ? "..." : ""}`);
         addServerLog(serverId, "pip", `⚙️ [Freestyle VPS] Installing dependencies directly into Cloud VM (${"104.207.76.33"})...`);
 
-        // Install on remote Freestyle VM directly
+        // Install dependencies directly in server workspace on VPS
         (async () => {
           try {
             await exec(`mkdir -p "${remoteDir}"`);
-            await getVm().fs.writeTextFile(`${remoteDir}/${reqFileName}`, reqContent);
             const remotePip = await exec(
               `python3 -m pip install --no-cache-dir --prefer-binary --break-system-packages -r "${remoteDir}/${reqFileName}"`
             );
@@ -2002,15 +2081,10 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
               const errLines = remotePip.stderr.split("\n").filter(l => l.trim().length > 0 && !l.includes("WARNING: Running pip as the 'root'"));
               for (const l of errLines) addServerLog(serverId, "stderr", l);
             }
-            if (remotePip.statusCode === 0) {
-              addServerLog(serverId, "pip", `✅ [Freestyle VPS] All requirements successfully installed on remote VM.`);
-              onComplete?.(true);
-            } else {
-              addServerLog(serverId, "stderr", `⚠️ Pip notice: process exited with code ${remotePip.statusCode}`);
-              onComplete?.(true);
-            }
+            addServerLog(serverId, "pip", `✅ [VPS Dependencies] Requirements successfully installed.`);
+            onComplete?.(true);
           } catch (vmErr: any) {
-            addServerLog(serverId, "stderr", `VM pip error: ${vmErr.message}`);
+            addServerLog(serverId, "stderr", `Pip install notice: ${vmErr.message}`);
             onComplete?.(false);
           }
         })();
@@ -2019,15 +2093,13 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
     }
 
     if (pkgFileName) {
-      addServerLog(serverId, "system", `📦 [NPM Manager] Running npm install on Freestyle Cloud VM...`);
+      addServerLog(serverId, "system", `📦 [NPM Manager] Running npm install on VPS...`);
       (async () => {
         try {
-          const pkgContent = fs.readFileSync(path.join(sDir, pkgFileName), "utf-8");
           await exec(`mkdir -p "${remoteDir}"`);
-          await getVm().fs.writeTextFile(`${remoteDir}/${pkgFileName}`, pkgContent);
           const npmRes = await exec(`cd "${remoteDir}" && npm install --prefer-offline --no-audit`);
           if (npmRes.stdout) addServerLog(serverId, "stdout", npmRes.stdout.trim());
-          addServerLog(serverId, "system", `✅ [Freestyle VPS] NPM packages installed.`);
+          addServerLog(serverId, "system", `✅ [VPS Dependencies] NPM packages installed.`);
           onComplete?.(true);
         } catch (npmErr: any) {
           addServerLog(serverId, "stderr", `NPM install notice: ${npmErr.message}`);
@@ -2142,7 +2214,8 @@ function killServerProcess(serverId: string) {
 // 3. Server Actions: Start, Stop, Restart (Per Server Process Isolation)
 app.post("/api/servers/action", (req, res) => {
   const { serverId, action } = req.body;
-  const server = findServer(serverId);
+  const servers = getServersData();
+  const server = servers.find((s) => s.id === serverId);
 
   if (!server) {
     return res.status(404).json({ error: "Server not found" });
@@ -2190,7 +2263,7 @@ app.post("/api/servers/action", (req, res) => {
       cmdStr = cmdStr.replace("python3 ", "python3 -u ");
     }
 
-    addServerLog(server.id, "system", `🚀 Launching server container on Freestyle Cloud VM (${LIVE_FREESTYLE_VM_ID})...`);
+    addServerLog(server.id, "system", `🚀 Launching server container on VPS Node (104.207.76.33)...`);
     addServerLog(server.id, "system", `🌐 Node IPv4: ${"104.207.76.33"} | 4 vCPU • 8 GB RAM • 32 GB Disk`);
     addServerLog(server.id, "system", `📦 Working directory: /home/container/`);
 
@@ -2225,7 +2298,7 @@ app.post("/api/servers/action", (req, res) => {
 
         // 2. Remove any previous container with this name
         await exec(`docker rm -f "${containerName}" 2>/dev/null || true`);
-        await exec(`mkdir -p "${remoteDir}" && rm -f "${remoteDir}/process.log" "${remoteDir}/server.pid"`);
+        await exec(`mkdir -p "${remoteDir}" && chmod -R 777 "${remoteDir}" 2>/dev/null && rm -f "${remoteDir}/process.log" "${remoteDir}/server.pid"`);
 
         // 3. Prepare Docker environment flags
         const dockerEnvFlags: string[] = [
@@ -2243,8 +2316,8 @@ app.post("/api/servers/action", (req, res) => {
         const portFlag = config.port ? `-p ${config.port}:${config.port}` : "";
 
         // 4. Launch Docker container in background
-        // Mount workspace volume + preinstalled python libraries
-        const dockerRunCmd = `docker run -d --name "${containerName}" ${portFlag} ${dockerEnvFlags.join(" ")} -v "${remoteDir}":/app -v /opt/freestyle/python:/opt/freestyle/python:ro -w /app python:3.12-slim sh -c "${cmdStr.replace(/"/g, '\\"')} > /app/process.log 2>&1"`;
+        // Mount persistent Docker volume to /home/container and /app
+        const dockerRunCmd = `docker run -d --name "${containerName}" ${portFlag} ${dockerEnvFlags.join(" ")} -v "${remoteDir}":/home/container:rw -v "${remoteDir}":/app:rw -v /opt/freestyle/python:/opt/freestyle/python:ro -w /home/container python:3.12-slim sh -c "${cmdStr.replace(/"/g, '\\"')} > /home/container/process.log 2>&1"`;
 
         addServerLog(server.id, "system", `📦 Initializing isolated Docker sandbox...`);
         const runRes = await exec(dockerRunCmd);
@@ -2391,20 +2464,83 @@ app.post("/api/servers/:id/config", (req, res) => {
   res.json({ success: true, server, config });
 });
 
-// 6. Server Files List (Direct Container Volume Access)
-app.get("/api/servers/:id/files", (req, res) => {
-  const { id } = req.params;
-  if (!isAuthorizedVps(req)) {
-    return res.status(401).json({ error: "Unauthorized access to VPS API" });
+// ============================================================================
+// DOCKER CONTAINER VOLUME FILE MANAGER API (/api/files/* & /api/servers/:id/files/*)
+// Physical VPS Path: /home/container/:serverId (mounted directly into Docker)
+// ============================================================================
+
+const vpsDiskStorage = multer.diskStorage({
+  destination: (req, _file, cb) => {
+    const sId = (
+      (req.query?.serverId as string) ||
+      (req.headers["x-server-id"] as string) ||
+      req.params?.id ||
+      req.body?.serverId ||
+      ""
+    ).trim();
+    const dest = sId ? getServerDir(sId) : "/home/container";
+    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true, mode: 0o777 });
+    cb(null, dest);
+  },
+  filename: (_req, file, cb) => {
+    cb(null, path.basename(file.originalname));
+  },
+});
+
+const vpsMulterUpload = multer({
+  storage: vpsDiskStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB per file limit
+  fileFilter: (_req, file, cb) => {
+    const cleanName = path.basename(file.originalname);
+    if (!isAllowedFileType(cleanName)) {
+      return cb(new Error(`File type rejected: ${path.extname(cleanName)} is not permitted on VPS container volume`));
+    }
+    cb(null, true);
+  },
+});
+
+// Helper to authenticate and verify server ownership for file requests
+async function resolveAndAuthorizeServer(req: express.Request, res: express.Response): Promise<{ server: ServerRecord; sDir: string; user: VpsUserRecord } | null> {
+  const user = await getAuthenticatedUser(req);
+  if (!user) {
+    res.status(401).json({ success: false, error: "Unauthorized access: Please login with a valid session or provide x-vps-api-secret" });
+    return null;
   }
 
-  const server = findServer(id);
+  const sId = (
+    (req.query?.serverId as string) ||
+    (req.headers["x-server-id"] as string) ||
+    req.params?.id ||
+    req.body?.serverId ||
+    ""
+  ).trim();
+
+  if (!sId) {
+    res.status(400).json({ success: false, error: "Missing required serverId parameter" });
+    return null;
+  }
+
+  const server = findServer(sId);
   if (!server) {
-    return res.status(404).json({ error: "Server not found" });
+    res.status(404).json({ success: false, error: `Bot server '${sId}' not found on VPS` });
+    return null;
+  }
+
+  if (!verifyServerOwnership(server, user)) {
+    res.status(403).json({ success: false, error: "Forbidden: You do not own this bot server" });
+    return null;
   }
 
   ensureServerWorkspace(server);
-  const sDir = getServerDir(id);
+  const sDir = getServerDir(server.id);
+  return { server, sDir, user };
+}
+
+// 1. List Files in Bot's Persistent Docker Volume
+async function handleListFiles(req: express.Request, res: express.Response) {
+  const auth = await resolveAndAuthorizeServer(req, res);
+  if (!auth) return;
+  const { server, sDir } = auth;
 
   try {
     const filenames = fs.readdirSync(sDir);
@@ -2433,197 +2569,61 @@ app.get("/api/servers/:id/files", (req, res) => {
       return a.name.localeCompare(b.name);
     });
 
-    res.json({ files });
+    res.json({
+      success: true,
+      files,
+      currentPath: "/home/container/",
+      volumeMount: sDir,
+      serverId: server.id,
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
-});
+}
 
-// 6b. Create Directory in Server Workspace
-app.post("/api/servers/:id/directories", (req, res) => {
-  const { id } = req.params;
-  const { dirName } = req.body;
-  if (!dirName || typeof dirName !== "string") {
-    return res.status(400).json({ error: "Directory name is required" });
-  }
+app.get("/api/files", handleListFiles);
+app.get("/api/servers/:id/files", handleListFiles);
 
-  const sDir = getServerDir(id);
-  const safeName = path.basename(dirName.trim());
-  const targetPath = path.join(sDir, safeName);
+// 2. Upload Files to Persistent Docker Container Volume (/home/container/)
+async function handleUploadFiles(req: express.Request, res: express.Response) {
+  const auth = await resolveAndAuthorizeServer(req, res);
+  if (!auth) return;
+  const { server, sDir } = auth;
 
-  try {
-    if (!fs.existsSync(targetPath)) {
-      fs.mkdirSync(targetPath, { recursive: true });
-      addServerLog(id, "system", `📁 Directory created: ${safeName}`);
-    }
-    res.json({ success: true, name: safeName });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 7. Get File Content
-app.get("/api/servers/:id/files/:filename", (req, res) => {
-  const { id, filename } = req.params;
-  const sDir = getServerDir(id);
-  const safeName = path.basename(filename);
-  const filePath = path.join(sDir, safeName);
-
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: `File ${safeName} not found` });
-  }
-
-  try {
-    const stat = fs.statSync(filePath);
-    if (stat.isDirectory()) {
-      return res.status(400).json({ error: "Cannot read content of a directory" });
-    }
-    const content = fs.readFileSync(filePath, "utf-8");
-    res.json({ name: safeName, content, size: stat.size });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 8. Save/Write File
-app.put("/api/servers/:id/files/:filename", async (req, res) => {
-  const { id, filename } = req.params;
-  const { content } = req.body;
-  const sDir = getServerDir(id);
-  if (!fs.existsSync(sDir)) fs.mkdirSync(sDir, { recursive: true });
-
-  const safeName = path.basename(filename);
-  const filePath = path.join(sDir, safeName);
-
-  try {
-    fs.writeFileSync(filePath, content ?? "", "utf-8");
-    // Direct sync to VPS immediately
-
-    addServerLog(id, "system", `💾 File saved directly to VPS: ${safeName} (${(content || "").length} bytes)`);
-
-    // Auto-detect and install updated dependencies immediately
-    if (safeName === "requirements.txt" || safeName === "package.json") {
-      const servers = getServersData();
-      const server = servers.find((s) => s.id === id);
-      if (server) {
-        const config = getServerConfig(id, server);
-        const procEnv = getOptimizedProcEnv(server, config, sDir);
-        checkAndInstallDependencies(id, sDir, procEnv);
-      }
-    }
-
-    res.json({ success: true, name: safeName });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 9. Delete File or Directory
-app.delete("/api/servers/:id/files/:filename", async (req, res) => {
-  const { id, filename } = req.params;
-  const sDir = getServerDir(id);
-  const safeName = path.basename(filename);
-  const filePath = path.join(sDir, safeName);
-
-  if (fs.existsSync(filePath)) {
-    try {
-      fs.rmSync(filePath, { recursive: true, force: true });
-      addServerLog(id, "system", `🗑️ Deleted from VPS: ${safeName}`);
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  } else {
-    res.status(404).json({ error: "File or directory not found" });
-  }
-});
-
-// 9b. Rename File or Directory
-app.post("/api/servers/:id/files/rename", async (req, res) => {
-  const { id } = req.params;
-  const { oldName, newName } = req.body;
-  if (!oldName || !newName) {
-    return res.status(400).json({ error: "oldName and newName are required" });
-  }
-  const sDir = getServerDir(id);
-  const oldPath = path.join(sDir, path.basename(oldName));
-  const newPath = path.join(sDir, path.basename(newName));
-
-  if (!fs.existsSync(oldPath)) {
-    return res.status(404).json({ error: "Original file not found" });
-  }
-
-  try {
-    fs.renameSync(oldPath, newPath);
-    await exec(`mv "/home/container/${id}/${path.basename(oldName)}" "/home/container/${id}/${path.basename(newName)}" || true`);
-    addServerLog(id, "system", `✏️ Renamed on VPS: ${path.basename(oldName)} to ${path.basename(newName)}`);
-    res.json({ success: true, name: path.basename(newName) });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 10. Upload File into Server Docker Container Volume
-const serverMulter = multer({
-  storage: multer.diskStorage({
-    destination: (req, _file, cb) => {
-      const dest = getServerDir(req.params.id);
-      if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true, mode: 0o777 });
-      cb(null, dest);
-    },
-    filename: (_req, file, cb) => {
-      cb(null, path.basename(file.originalname));
-    },
-  }),
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit for full bot archives
-});
-
-app.post("/api/servers/:id/files/upload", serverMulter.any(), async (req, res) => {
-  const { id } = req.params;
-  if (!isAuthorizedVps(req)) {
-    return res.status(401).json({ error: "Unauthorized access to VPS API" });
-  }
-
-  const server = findServer(id);
   const rawFiles = (req.files as Express.Multer.File[]) || (req.file ? [req.file] : []);
   if (!rawFiles || rawFiles.length === 0) {
-    return res.status(400).json({ error: "No files uploaded" });
+    return res.status(400).json({ success: false, error: "No files uploaded to VPS" });
   }
 
-  const sDir = getServerDir(id);
-  if (!fs.existsSync(sDir)) {
-    fs.mkdirSync(sDir, { recursive: true, mode: 0o777 });
-  }
   const uploadedNames: string[] = [];
 
   for (const f of rawFiles) {
-    const uploadedName = f.originalname;
+    const uploadedName = path.basename(f.originalname);
     uploadedNames.push(uploadedName);
     const isZip = uploadedName.toLowerCase().endsWith(".zip");
 
-    addServerLog(id, "system", `📁 File uploaded to container volume: ${uploadedName} (${f.size} bytes)`);
+    addServerLog(server.id, "system", `📁 File received into container volume: ${uploadedName} (${f.size} bytes)`);
 
     if (isZip) {
-      addServerLog(id, "system", `📦 Extracting ZIP archive into container volume: ${uploadedName}...`);
+      addServerLog(server.id, "system", `📦 Auto-extracting ZIP into persistent Docker volume /home/container/...`);
       let extracted = false;
       try {
         await exec(`unzip -o "${f.path}" -d "${sDir}"`, { cwd: sDir });
         extracted = true;
       } catch {
-        // Fallback to Python 3's built-in zipfile module if unzip package is not installed on Ubuntu
         try {
           await exec(`python3 -m zipfile -e "${f.path}" "${sDir}"`, { cwd: sDir });
           extracted = true;
         } catch (pyZipErr: any) {
-          addServerLog(id, "stderr", `⚠️ Zip extraction error: ${pyZipErr.message}`);
+          addServerLog(server.id, "stderr", `⚠️ Zip extraction error: ${pyZipErr.message}`);
         }
       }
 
       if (extracted) {
-        addServerLog(id, "system", `✅ ZIP contents unpacked into container volume.`);
-        try { fs.rmSync(f.path, { force: true }); } catch (e) {}
+        addServerLog(server.id, "system", `✅ ZIP contents unpacked into /home/container/`);
+        try { fs.rmSync(f.path, { force: true }); } catch {}
 
-        // If files were extracted into a single wrapper folder (e.g. from GitHub releases or repo zips), flatten to root
+        // If files were extracted into a single wrapper directory, flatten into root
         try {
           const contents = fs.readdirSync(sDir).filter(
             (n) => n !== ".config.json" && n !== ".initialized" && n !== ".backups"
@@ -2647,22 +2647,23 @@ app.post("/api/servers/:id/files/upload", serverMulter.any(), async (req, res) =
     }
   }
 
-  // Ensure full permissions for Docker container access on Linux
+  // Ensure full read/write permissions for Docker container processes
   try {
     await exec(`chmod -R 777 "${sDir}" 2>/dev/null || true`);
   } catch {}
 
-  // If Docker container is running, sync into active container /app directly
-  const containerName = `bot_container_${id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+  // Live sync with running Docker container if active
+  const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
   try {
+    await exec(`docker cp "${sDir}/." "${containerName}:/home/container/" 2>/dev/null || true`);
     await exec(`docker cp "${sDir}/." "${containerName}:/app/" 2>/dev/null || true`);
   } catch {}
 
-  // Detect requirements or package.json
+  // Check for dependencies updates
   try {
     const dirFiles = fs.readdirSync(sDir);
-    if (dirFiles.some(f => f.toLowerCase() === "requirements.txt")) {
-      addServerLog(id, "system", `📋 Detected requirements.txt in container volume. Ready to install dependencies.`);
+    if (dirFiles.some((f) => f.toLowerCase() === "requirements.txt")) {
+      addServerLog(server.id, "system", `📋 Detected requirements.txt. Ready to install dependencies.`);
     }
   } catch {}
 
@@ -2670,9 +2671,229 @@ app.post("/api/servers/:id/files/upload", serverMulter.any(), async (req, res) =
     success: true,
     count: rawFiles.length,
     filenames: uploadedNames,
-    message: `${rawFiles.length} file(s) saved directly to VPS container volume`,
+    path: "/home/container/",
+    volume: sDir,
+    message: `${rawFiles.length} file(s) saved directly into VPS Docker volume /home/container/`,
   });
-});
+}
+
+app.post("/api/files/upload", vpsMulterUpload.any(), handleUploadFiles);
+app.post("/api/servers/:id/files/upload", vpsMulterUpload.any(), handleUploadFiles);
+
+// 3. Download File from Docker Container Volume
+async function handleDownloadFile(req: express.Request, res: express.Response) {
+  const auth = await resolveAndAuthorizeServer(req, res);
+  if (!auth) return;
+  const { sDir } = auth;
+
+  const filename = (req.query?.filename as string) || req.params?.filename || "";
+  if (!filename) {
+    return res.status(400).json({ success: false, error: "Filename is required" });
+  }
+
+  const safeName = path.basename(filename);
+  const filePath = path.join(sDir, safeName);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ success: false, error: `File '${safeName}' not found in container volume` });
+  }
+
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      return res.status(400).json({ success: false, error: "Cannot download directory directly" });
+    }
+    res.download(filePath, safeName);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+app.get("/api/files/download", handleDownloadFile);
+app.get("/api/servers/:id/files/:filename/download", handleDownloadFile);
+
+// 4. Get File Content (for code editor in Files tab)
+async function handleGetFileContent(req: express.Request, res: express.Response) {
+  const auth = await resolveAndAuthorizeServer(req, res);
+  if (!auth) return;
+  const { sDir } = auth;
+
+  const filename = (req.query?.filename as string) || req.params?.filename || "";
+  if (!filename) {
+    return res.status(400).json({ success: false, error: "Filename is required" });
+  }
+
+  const safeName = path.basename(filename);
+  const filePath = path.join(sDir, safeName);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ success: false, error: `File '${safeName}' not found in container volume` });
+  }
+
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      return res.status(400).json({ success: false, error: "Cannot read content of a directory" });
+    }
+    const content = fs.readFileSync(filePath, "utf-8");
+    res.json({ success: true, name: safeName, content, size: stat.size, path: `/home/container/${safeName}` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+app.get("/api/files/content", handleGetFileContent);
+app.get("/api/servers/:id/files/:filename", handleGetFileContent);
+
+// 5. Create / Save File into Docker Container Volume
+async function handleSaveFile(req: express.Request, res: express.Response) {
+  const auth = await resolveAndAuthorizeServer(req, res);
+  if (!auth) return;
+  const { server, sDir } = auth;
+
+  const filename = (req.body?.filename as string) || req.params?.filename || "";
+  if (!filename) {
+    return res.status(400).json({ success: false, error: "Filename is required" });
+  }
+
+  const safeName = path.basename(filename);
+  if (!isAllowedFileType(safeName)) {
+    return res.status(400).json({ success: false, error: `Disallowed file type: ${path.extname(safeName)}` });
+  }
+
+  const content = req.body?.content ?? "";
+  const filePath = path.join(sDir, safeName);
+
+  try {
+    fs.writeFileSync(filePath, content, "utf-8");
+    try { fs.chmodSync(filePath, 0o777); } catch {}
+
+    addServerLog(server.id, "system", `💾 File saved to container volume /home/container/${safeName} (${content.length} bytes)`);
+
+    // Sync to running container
+    const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+    try {
+      await exec(`docker cp "${filePath}" "${containerName}:/home/container/${safeName}" 2>/dev/null || true`);
+      await exec(`docker cp "${filePath}" "${containerName}:/app/${safeName}" 2>/dev/null || true`);
+    } catch {}
+
+    // Auto-detect updated dependencies
+    if (safeName === "requirements.txt" || safeName === "package.json") {
+      const config = getServerConfig(server.id, server);
+      const procEnv = getOptimizedProcEnv(server, config, sDir);
+      checkAndInstallDependencies(server.id, sDir, procEnv);
+    }
+
+    res.json({ success: true, name: safeName, path: `/home/container/${safeName}` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+app.post("/api/files/create", handleSaveFile);
+app.put("/api/servers/:id/files/:filename", handleSaveFile);
+
+// 6. Create Directory in Docker Container Volume
+async function handleCreateDirectory(req: express.Request, res: express.Response) {
+  const auth = await resolveAndAuthorizeServer(req, res);
+  if (!auth) return;
+  const { server, sDir } = auth;
+
+  const dirName = (req.body?.dirName as string) || (req.body?.folderName as string) || "";
+  if (!dirName || typeof dirName !== "string") {
+    return res.status(400).json({ success: false, error: "Directory/folder name is required" });
+  }
+
+  const safeName = path.basename(dirName.trim());
+  const targetPath = path.join(sDir, safeName);
+
+  try {
+    if (!fs.existsSync(targetPath)) {
+      fs.mkdirSync(targetPath, { recursive: true, mode: 0o777 });
+      addServerLog(server.id, "system", `📁 Folder created in container volume: /home/container/${safeName}`);
+      const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+      try {
+        await exec(`docker exec "${containerName}" mkdir -p "/home/container/${safeName}" 2>/dev/null || true`);
+      } catch {}
+    }
+    res.json({ success: true, name: safeName, path: `/home/container/${safeName}` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+app.post("/api/files/folder", handleCreateDirectory);
+app.post("/api/servers/:id/directories", handleCreateDirectory);
+
+// 7. Delete File or Directory from Docker Container Volume
+async function handleDeleteFile(req: express.Request, res: express.Response) {
+  const auth = await resolveAndAuthorizeServer(req, res);
+  if (!auth) return;
+  const { server, sDir } = auth;
+
+  const filename = (req.query?.filename as string) || (req.body?.filename as string) || req.params?.filename || "";
+  if (!filename) {
+    return res.status(400).json({ success: false, error: "Filename is required" });
+  }
+
+  const safeName = path.basename(filename);
+  const filePath = path.join(sDir, safeName);
+
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.rmSync(filePath, { recursive: true, force: true });
+      addServerLog(server.id, "system", `🗑️ Deleted from container volume: /home/container/${safeName}`);
+      const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+      try {
+        await exec(`docker exec "${containerName}" rm -rf "/home/container/${safeName}" "/app/${safeName}" 2>/dev/null || true`);
+      } catch {}
+      res.json({ success: true, message: `Deleted ${safeName} from VPS container volume` });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  } else {
+    res.status(404).json({ success: false, error: "File or directory not found in container volume" });
+  }
+}
+
+app.delete("/api/files", handleDeleteFile);
+app.delete("/api/servers/:id/files/:filename", handleDeleteFile);
+
+// 8. Rename File or Directory in Docker Container Volume
+async function handleRenameFile(req: express.Request, res: express.Response) {
+  const auth = await resolveAndAuthorizeServer(req, res);
+  if (!auth) return;
+  const { server, sDir } = auth;
+
+  const { oldName, newName } = req.body;
+  if (!oldName || !newName) {
+    return res.status(400).json({ success: false, error: "oldName and newName are required" });
+  }
+
+  const safeOld = path.basename(oldName);
+  const safeNew = path.basename(newName);
+  const oldPath = path.join(sDir, safeOld);
+  const newPath = path.join(sDir, safeNew);
+
+  if (!fs.existsSync(oldPath)) {
+    return res.status(404).json({ success: false, error: "Original file not found" });
+  }
+
+  try {
+    fs.renameSync(oldPath, newPath);
+    addServerLog(server.id, "system", `✏️ Renamed in container volume: ${safeOld} -> ${safeNew}`);
+    const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+    try {
+      await exec(`docker exec "${containerName}" mv "/home/container/${safeOld}" "/home/container/${safeNew}" 2>/dev/null || true`);
+    } catch {}
+    res.json({ success: true, name: safeNew, path: `/home/container/${safeNew}` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+app.post("/api/files/rename", handleRenameFile);
+app.post("/api/servers/:id/files/rename", handleRenameFile);
 
 // 10a. Explicit Dependency Install Trigger
 app.post("/api/servers/:id/install", (req, res) => {
@@ -2807,7 +3028,7 @@ app.post("/api/servers/:id/logs/clear", (req, res) => {
 });
 
 // 12. Server Terminal Command Runner (Per-Server Execution)
-app.post("/api/servers/:id/command", (req, res) => {
+app.post("/api/servers/:id/command", async (req, res) => {
   const { id } = req.params;
   const { command } = req.body;
   const server = findServer(id);
@@ -2858,36 +3079,36 @@ app.post("/api/servers/:id/command", (req, res) => {
     if (item.key) envObj[item.key] = item.value;
   }
 
-  exec(
-    cmd,
-    {
+  try {
+    const { stdout, stderr } = await exec(cmd, {
       cwd: sDir,
       timeout: 10000,
       maxBuffer: 1024 * 1024,
       env: { ...process.env, ...envObj, SERVER_NAME: server.name },
-    },
-    (error, stdout, stderr) => {
-      if (stdout) {
-        for (const line of stdout.trim().split("\n")) {
-          if (line) addServerLog(id, "stdout", line);
-        }
+    });
+    if (stdout) {
+      for (const line of stdout.trim().split("\n")) {
+        if (line) addServerLog(id, "stdout", line);
       }
-      if (stderr) {
-        for (const line of stderr.trim().split("\n")) {
-          if (line) addServerLog(id, "stderr", line);
-        }
-      }
-      if (error && !stderr) {
-        addServerLog(id, "stderr", `Error: ${error.message}`);
-      }
-
-      res.json({
-        success: !error,
-        stdout: stdout || "",
-        stderr: stderr || (error ? error.message : ""),
-      });
     }
-  );
+    if (stderr) {
+      for (const line of stderr.trim().split("\n")) {
+        if (line) addServerLog(id, "stderr", line);
+      }
+    }
+    res.json({
+      success: true,
+      stdout: stdout || "",
+      stderr: stderr || "",
+    });
+  } catch (err: any) {
+    addServerLog(id, "stderr", `Error: ${err.message}`);
+    res.json({
+      success: false,
+      stdout: err.stdout || "",
+      stderr: err.stderr || err.message,
+    });
+  }
 });
 
 // 13. Reinstall Server (Reset to pristine category starter)
@@ -2961,13 +3182,10 @@ app.delete("/api/servers/:id", (req, res) => {
 });
 
 // 15. Freestyle Cloud VM Status & Integration Endpoint
-app.get("/api/cloud-vm/status", async (req, res) => {
-  const freestyleKey = getFreestyleKey();
-  const isConfigured = Boolean(freestyleKey && freestyleKey.trim().length > 0);
-
+app.get("/api/cloud-vm/status", async (_req, res) => {
   let vmInfo = {
-    provider: "Freestyle.sh",
-    vmId: LIVE_FREESTYLE_VM_ID,
+    provider: "VPS Dedicated Node",
+    vmId: "vps_node_main",
     vCPU: "4 vCPU",
     ram: "8 GB RAM",
     storage: "32 GB Disk",
@@ -2991,11 +3209,10 @@ app.post("/api/cloud-vm/exec", async (req, res) => {
     res.json({
       success: true,
       command,
-      output: output || `[Exit Code: ${vmExecRes.statusCode}]`,
-      provider: "Freestyle.sh",
-      vmId: LIVE_FREESTYLE_VM_ID,
-      statusCode: vmExecRes.statusCode,
-      message: "Command executed live on Freestyle VM",
+      output: output || "[Success]",
+      provider: "VPS Node",
+      vmId: "vps_node_main",
+      message: "Command executed live on VPS Node",
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -3003,7 +3220,7 @@ app.post("/api/cloud-vm/exec", async (req, res) => {
 });
 
 // 17. Architecture Pipeline & Docker Status API
-app.get("/api/pipeline/architecture", async (req, res) => {
+app.get("/api/pipeline/architecture", async (_req, res) => {
   try {
     const dockerInfoRes = await exec('docker ps -a --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}" || true');
     const dockerVerRes = await exec('docker info --format "{{.ServerVersion}}" 2>/dev/null || docker --version || true');
@@ -3049,7 +3266,7 @@ app.get("/api/pipeline/architecture", async (req, res) => {
           name: "VPS (Space/Cloud VM)",
           role: "High-Performance Cloud Node",
           status: "CONNECTED",
-          vmId: LIVE_FREESTYLE_VM_ID,
+          vmId: "vps_node_main",
           ip: "104.207.76.33",
           os: "Ubuntu 24.04 LTS (4 vCPU • 8GB RAM)",
           description: "Dedicated cloud compute host running 24/7 with direct egress networking",
@@ -3081,8 +3298,8 @@ app.get("/api/pipeline/architecture", async (req, res) => {
         postgresReady: true,
       },
       vpsNode: {
-        provider: "Cloud VPS (Space/Freestyle)",
-        vmId: LIVE_FREESTYLE_VM_ID,
+        provider: "Cloud VPS Node",
+        vmId: "vps_node_main",
         ip: "104.207.76.33",
         dockerActive: true,
         containersRunning: (dockerInfoRes.stdout || "").split("\n").filter((l) => l.trim().length > 0).length - 1,

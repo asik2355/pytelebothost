@@ -38,6 +38,7 @@ import {
   Zap,
 } from "lucide-react";
 import { ActiveServer, AppNotification, BotLog, WorkspaceFile } from "../types";
+import { apiFetch } from "../lib/api";
 
 export type ControlPanelTab =
   | "Console"
@@ -438,13 +439,17 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
 
     setIsUploading(true);
     const formData = new FormData();
+    formData.append("serverId", server.id);
     for (const file of filesToUpload) {
       formData.append("files", file);
     }
 
     try {
-      const res = await apiFetch(`/api/servers/${server.id}/files/upload`, {
+      const res = await apiFetch(`/api/files/upload?serverId=${encodeURIComponent(server.id)}`, {
         method: "POST",
+        headers: {
+          "x-server-id": server.id,
+        },
         body: formData,
       });
       if (res.ok) {
@@ -576,21 +581,37 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
     }
   };
 
-  const handleDownloadFile = (filename: string) => {
-    const filePath = `/api/servers/${server.id}/files/${encodeURIComponent(filename)}`;
-    apiFetch(filePath)
-      .then((r) => r.json())
-      .then((data) => {
+  const handleDownloadFile = async (filename: string) => {
+    try {
+      const res = await apiFetch(`/api/files/download?serverId=${encodeURIComponent(server.id)}&filename=${encodeURIComponent(filename)}`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        const r = await apiFetch(`/api/servers/${server.id}/files/${encodeURIComponent(filename)}`);
+        const data = await r.json();
         if (data.content !== undefined) {
           const blob = new Blob([data.content], { type: "text/plain;charset=utf-8" });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
           a.download = filename;
+          document.body.appendChild(a);
           a.click();
+          document.body.removeChild(a);
           URL.revokeObjectURL(url);
         }
-      });
+      }
+    } catch (e) {
+      console.error("Download error:", e);
+    }
   };
 
   // Backups Handlers
