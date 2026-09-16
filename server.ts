@@ -1388,9 +1388,60 @@ interface ServerRuntime {
 
 const serverRuntimes = new Map<string, ServerRuntime>();
 
+// Authentication validator for VPS API endpoints
+function isAuthorizedVps(req: express.Request): boolean {
+  const secret = process.env.VPS_API_SECRET || process.env.BOT_HOST_VPS_API_SECRET;
+  if (!secret) return true; // If secret is not configured on VPS, allow authenticated frontend sessions
+  const reqSecret = req.headers["x-vps-api-secret"] as string;
+  const authHeader = req.headers["authorization"] as string;
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+  return reqSecret === secret || token === secret;
+}
+
 function getServerDir(serverId: string): string {
   const safeId = path.basename(serverId);
-  return path.join(USER_SERVERS_DIR, safeId);
+  const containerDir = path.join("/home/container", safeId);
+  const localDir = path.join(USER_SERVERS_DIR, safeId);
+
+  // If running on Linux VPS with /home/container permissions
+  try {
+    if (!fs.existsSync("/home/container")) {
+      fs.mkdirSync("/home/container", { recursive: true, mode: 0o777 });
+    }
+  } catch {}
+
+  try {
+    if (fs.existsSync("/home/container")) {
+      if (!fs.existsSync(containerDir)) {
+        fs.mkdirSync(containerDir, { recursive: true, mode: 0o777 });
+        // Migrate any pre-existing files from localDir if present
+        if (fs.existsSync(localDir) && !fs.lstatSync(localDir).isSymbolicLink()) {
+          try {
+            const files = fs.readdirSync(localDir);
+            for (const f of files) {
+              const src = path.join(localDir, f);
+              const dst = path.join(containerDir, f);
+              if (!fs.existsSync(dst)) {
+                fs.copyFileSync(src, dst);
+              }
+            }
+          } catch {}
+        }
+      }
+      // Symlink localDir to containerDir so both paths work seamlessly
+      try {
+        if (!fs.existsSync(localDir)) {
+          fs.symlinkSync(containerDir, localDir, "dir");
+        }
+      } catch {}
+      return containerDir;
+    }
+  } catch {}
+
+  if (!fs.existsSync(localDir)) {
+    fs.mkdirSync(localDir, { recursive: true });
+  }
+  return localDir;
 }
 
 function getServerConfigFile(serverId: string): string {
@@ -2340,9 +2391,13 @@ app.post("/api/servers/:id/config", (req, res) => {
   res.json({ success: true, server, config });
 });
 
-// 6. Server Files List
+// 6. Server Files List (Direct Container Volume Access)
 app.get("/api/servers/:id/files", (req, res) => {
   const { id } = req.params;
+  if (!isAuthorizedVps(req)) {
+    return res.status(401).json({ error: "Unauthorized access to VPS API" });
+  }
+
   const server = findServer(id);
   if (!server) {
     return res.status(404).json({ error: "Server not found" });
@@ -2508,61 +2563,114 @@ app.post("/api/servers/:id/files/rename", async (req, res) => {
   }
 });
 
-// 10. Upload File into Server
+// 10. Upload File into Server Docker Container Volume
 const serverMulter = multer({
   storage: multer.diskStorage({
     destination: (req, _file, cb) => {
       const dest = getServerDir(req.params.id);
-      if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+      if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true, mode: 0o777 });
       cb(null, dest);
     },
     filename: (_req, file, cb) => {
       cb(null, path.basename(file.originalname));
     },
   }),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit for full bot archives
 });
 
-app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), async (req, res) => {
+app.post("/api/servers/:id/files/upload", serverMulter.any(), async (req, res) => {
   const { id } = req.params;
+  if (!isAuthorizedVps(req)) {
+    return res.status(401).json({ error: "Unauthorized access to VPS API" });
+  }
+
   const server = findServer(id);
   const rawFiles = (req.files as Express.Multer.File[]) || (req.file ? [req.file] : []);
   if (!rawFiles || rawFiles.length === 0) {
     return res.status(400).json({ error: "No files uploaded" });
   }
 
-  // Limit to max 10 files
-  const uploadedFiles = rawFiles.slice(0, 10);
   const sDir = getServerDir(id);
   if (!fs.existsSync(sDir)) {
-    fs.mkdirSync(sDir, { recursive: true });
+    fs.mkdirSync(sDir, { recursive: true, mode: 0o777 });
   }
   const uploadedNames: string[] = [];
 
-  for (const f of uploadedFiles) {
+  for (const f of rawFiles) {
     const uploadedName = f.originalname;
     uploadedNames.push(uploadedName);
     const isZip = uploadedName.toLowerCase().endsWith(".zip");
 
-    addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${f.size} bytes)`);
+    addServerLog(id, "system", `📁 File uploaded to container volume: ${uploadedName} (${f.size} bytes)`);
 
     if (isZip) {
-      addServerLog(id, "system", `📦 Auto-extracting ZIP archive: ${uploadedName}...`);
+      addServerLog(id, "system", `📦 Extracting ZIP archive into container volume: ${uploadedName}...`);
+      let extracted = false;
       try {
         await exec(`unzip -o "${f.path}" -d "${sDir}"`, { cwd: sDir });
-        addServerLog(id, "system", `✅ ZIP contents successfully extracted.`);
+        extracted = true;
+      } catch {
+        // Fallback to Python 3's built-in zipfile module if unzip package is not installed on Ubuntu
+        try {
+          await exec(`python3 -m zipfile -e "${f.path}" "${sDir}"`, { cwd: sDir });
+          extracted = true;
+        } catch (pyZipErr: any) {
+          addServerLog(id, "stderr", `⚠️ Zip extraction error: ${pyZipErr.message}`);
+        }
+      }
+
+      if (extracted) {
+        addServerLog(id, "system", `✅ ZIP contents unpacked into container volume.`);
         try { fs.rmSync(f.path, { force: true }); } catch (e) {}
-      } catch (unzipErr: any) {
-        addServerLog(id, "stderr", `⚠️ Unzip error: ${unzipErr.message}`);
+
+        // If files were extracted into a single wrapper folder (e.g. from GitHub releases or repo zips), flatten to root
+        try {
+          const contents = fs.readdirSync(sDir).filter(
+            (n) => n !== ".config.json" && n !== ".initialized" && n !== ".backups"
+          );
+          if (contents.length === 1) {
+            const singleItem = path.join(sDir, contents[0]);
+            if (fs.statSync(singleItem).isDirectory()) {
+              const subItems = fs.readdirSync(singleItem);
+              for (const item of subItems) {
+                const srcPath = path.join(singleItem, item);
+                const destPath = path.join(sDir, item);
+                if (!fs.existsSync(destPath)) {
+                  fs.renameSync(srcPath, destPath);
+                }
+              }
+              try { fs.rmSync(singleItem, { recursive: true, force: true }); } catch {}
+            }
+          }
+        } catch {}
       }
     }
   }
 
+  // Ensure full permissions for Docker container access on Linux
+  try {
+    await exec(`chmod -R 777 "${sDir}" 2>/dev/null || true`);
+  } catch {}
+
+  // If Docker container is running, sync into active container /app directly
+  const containerName = `bot_container_${id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+  try {
+    await exec(`docker cp "${sDir}/." "${containerName}:/app/" 2>/dev/null || true`);
+  } catch {}
+
+  // Detect requirements or package.json
+  try {
+    const dirFiles = fs.readdirSync(sDir);
+    if (dirFiles.some(f => f.toLowerCase() === "requirements.txt")) {
+      addServerLog(id, "system", `📋 Detected requirements.txt in container volume. Ready to install dependencies.`);
+    }
+  } catch {}
+
   res.json({
     success: true,
-    count: uploadedFiles.length,
+    count: rawFiles.length,
     filenames: uploadedNames,
-    message: `${uploadedFiles.length} file(s) placed directly on VPS successfully`,
+    message: `${rawFiles.length} file(s) saved directly to VPS container volume`,
   });
 });
 

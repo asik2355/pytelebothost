@@ -450,7 +450,7 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
       if (res.ok) {
         await fetchFiles();
         const firstFile = filesToUpload[0];
-        if (firstFile) {
+        if (firstFile && !firstFile.name.toLowerCase().endsWith(".zip")) {
           setSelectedFile(firstFile.name);
           loadFileContent(firstFile.name);
         }
