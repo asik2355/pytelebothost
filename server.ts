@@ -1658,7 +1658,7 @@ function getServerRuntime(serverId: string): ServerRuntime {
           id: 2,
           timestamp: initialLogTime,
           type: "system",
-          message: `[Freestyle Cloud VM] Container workspace provisioned at /home/container/${serverId}/ (VPS IP: ${"104.207.76.33"})`,
+          message: `[VPS Docker Node] Container workspace provisioned at /home/container/${serverId}/ (Host IP: 104.207.76.33)`,
         },
       ],
       logCounter: 3,
@@ -2361,9 +2361,11 @@ cd /home/container
 echo "[SYSTEM] Initializing container sandbox environment..." >> /home/container/process.log
 
 if [ -f requirements.txt ]; then
-  echo "📦 [Docker Container] Installing dependencies from requirements.txt inside isolated sandbox..." >> /home/container/process.log
-  pip install --no-cache-dir --prefer-binary -r requirements.txt >> /home/container/process.log 2>&1
-  echo "✅ [Docker Container] Dependencies successfully installed inside container." >> /home/container/process.log
+  echo "📦 [Docker Container] Preparing requirements.txt..." >> /home/container/process.log
+  tr -d '\\r' < requirements.txt > /tmp/requirements_clean.txt
+  echo "📦 [Docker Container] Installing all Python packages inside isolated container..." >> /home/container/process.log
+  pip install --no-cache-dir --prefer-binary --ignore-installed -r /tmp/requirements_clean.txt >> /home/container/process.log 2>&1
+  echo "✅ [Docker Container] All requirements.txt packages installed successfully." >> /home/container/process.log
 fi
 
 if [ -f package.json ]; then
@@ -2453,9 +2455,29 @@ exec ${cmdStr} >> /home/container/process.log 2>&1
         const venvPy = path.join(venvDir, "bin", "python3");
         if (fs.existsSync(venvPy) && execCmd.startsWith("python3 ")) {
           execCmd = execCmd.replace("python3 ", `"${venvPy}" `);
-          const reqPath = path.join(remoteDir, "requirements.txt");
-          if (fs.existsSync(reqPath)) {
-            await exec(`"${path.join(venvDir, "bin", "pip")}" install --no-cache-dir -r "${reqPath}" 2>/dev/null || true`);
+        }
+
+        const reqPath = path.join(remoteDir, "requirements.txt");
+        if (fs.existsSync(reqPath)) {
+          addServerLog(server.id, "pip", `📦 Installing all packages from requirements.txt...`);
+          try {
+            const venvPip = path.join(venvDir, "bin", "pip");
+            const pipCmd = fs.existsSync(venvPip)
+              ? `"${venvPip}" install --no-cache-dir --prefer-binary -r "${reqPath}"`
+              : `python3 -m pip install --no-cache-dir --prefer-binary --break-system-packages --ignore-installed -r "${reqPath}"`;
+            const pipRes = await exec(pipCmd);
+            if (pipRes.stdout) {
+              for (const line of pipRes.stdout.split("\n").filter(l => l.trim().length > 0)) {
+                addServerLog(server.id, "pip", line);
+              }
+            }
+            addServerLog(server.id, "pip", `✅ All requirements.txt packages installed successfully.`);
+          } catch (pipErr: any) {
+            addServerLog(server.id, "stderr", `Pip install note: ${pipErr.message}`);
+            try {
+              await exec(`python3 -m pip install --no-cache-dir --break-system-packages --ignore-installed -r "${reqPath}"`);
+              addServerLog(server.id, "pip", `✅ All requirements.txt packages installed successfully.`);
+            } catch {}
           }
         }
 
@@ -3365,7 +3387,7 @@ app.delete("/api/servers/:id", (req, res) => {
   res.json({ success: true, deletedId: id, servers });
 });
 
-// 15. Freestyle Cloud VM Status & Integration Endpoint
+// 15. VPS Dedicated Node Status & Integration Endpoint
 app.get("/api/cloud-vm/status", async (_req, res) => {
   let vmInfo = {
     provider: "VPS Dedicated Node",
@@ -3383,7 +3405,7 @@ app.get("/api/cloud-vm/status", async (_req, res) => {
   res.json(vmInfo);
 });
 
-// 16. Freestyle Remote Command Execution via SDK
+// 16. VPS Remote Command Execution
 app.post("/api/cloud-vm/exec", async (req, res) => {
   const { command = "python3 --version" } = req.body;
 
