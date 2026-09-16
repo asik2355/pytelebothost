@@ -21,6 +21,8 @@
     "express": "^4.21.2",
     "firebase": "^12.19.0",
     "firebase-admin": "^11.11.1",
+    "freestyle": "^0.2.13",
+    "freestyle-sh": "^0.4.32",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "multer": "^2.3.0",

@@ -3,83 +3,38 @@ import cors from "cors";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { spawn, exec, execSync, ChildProcess } from "child_process";
+import { spawn, exec as cp_exec, execSync, ChildProcess } from "child_process";
+import { promisify } from "util";
+const exec = promisify(cp_exec);
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
-import { Freestyle } from "freestyle";
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore, Firestore } from "firebase-admin/firestore";
 
-const LIVE_FREESTYLE_VM_ID = "vm-e0958917577143f9827ef83fce45f93f";
-const LIVE_FREESTYLE_EGRESS_IP = "208.72.218.137";
-const VERIFIED_FREESTYLE_KEY = "36Mb1BPTLy7gy98YbwsQzo-G4nvasesega4kkpu2PzG3vWUDgb7qct2SryQ6r3V38BD";
-
-function getFreestyleKey(): string {
-  const envKey = process.env.FREESTYLE_API_KEY?.trim();
-  // Vn3v4rn1kwM76U6Vn6nmrn is an invalid placeholder that fails with 'Invalid or unknown API key'
-  if (envKey && envKey.length > 40 && envKey !== "Vn3v4rn1kwM76U6Vn6nmrn") {
-    return envKey;
-  }
-  return VERIFIED_FREESTYLE_KEY;
-}
-
-// Force clean environment variable so all child processes or modules use the verified key
-process.env.FREESTYLE_API_KEY = getFreestyleKey();
-
-let freestyleClient = new Freestyle({ apiKey: getFreestyleKey() });
-let freestyleVm = freestyleClient.vms.ref(LIVE_FREESTYLE_VM_ID);
-
-function getVm() {
-  const key = getFreestyleKey();
-  if (!freestyleClient || (freestyleClient as any).apiKey !== key) {
-    freestyleClient = new Freestyle({ apiKey: key });
-    freestyleVm = freestyleClient.vms.ref(LIVE_FREESTYLE_VM_ID);
-  }
-  return freestyleVm;
-}
 
 async function syncFileToVm(remotePath: string, content: string | Buffer) {
   try {
     const parentDir = path.dirname(remotePath);
-    await getVm().exec(`mkdir -p "${parentDir}"`);
-    if (typeof content === "string") {
-      await getVm().fs.writeTextFile(remotePath, content);
-    } else {
-      const b64 = content.toString("base64");
-      await getVm().exec(`node -e 'fs.writeFileSync("${remotePath}", Buffer.from("${b64}", "base64"))'`);
-    }
+    if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+    fs.writeFileSync(remotePath, content);
   } catch (err: any) {
     console.warn(`Sync file ${remotePath} warning:`, err.message);
   }
 }
-
 async function removeFileFromVm(remotePath: string) {
   try {
-    await getVm().exec(`rm -rf "${remotePath}"`);
+    if (fs.existsSync(remotePath)) fs.rmSync(remotePath, { recursive: true, force: true });
   } catch (err: any) {
     console.warn(`Remove file ${remotePath} warning:`, err.message);
   }
 }
-
 async function syncLocalDirectoryToVm(localDir: string, remoteDir: string) {
   try {
-    await getVm().exec(`mkdir -p "${remoteDir}"`);
+    if (!fs.existsSync(remoteDir)) fs.mkdirSync(remoteDir, { recursive: true });
     if (!fs.existsSync(localDir)) return;
-    const items = fs.readdirSync(localDir);
-    for (const item of items) {
-      if (item === ".config.json" || item === ".backups") continue;
-      const fullLocal = path.join(localDir, item);
-      const fullRemote = path.join(remoteDir, item);
-      const stat = fs.statSync(fullLocal);
-      if (stat.isDirectory()) {
-        await syncLocalDirectoryToVm(fullLocal, fullRemote);
-      } else {
-        const text = fs.readFileSync(fullLocal, "utf-8");
-        await getVm().fs.writeTextFile(fullRemote, text);
-      }
-    }
+    fs.cpSync(localDir, remoteDir, { recursive: true });
   } catch (err: any) {
-    console.warn(`Sync directory ${localDir} -> ${remoteDir} notice:`, err.message);
+    console.warn(`Sync directory warning:`, err.message);
   }
 }
 
@@ -1909,9 +1864,9 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
         // Install on remote Freestyle VM directly
         (async () => {
           try {
-            await getVm().exec(`mkdir -p "${remoteDir}"`);
+            await exec(`mkdir -p "${remoteDir}"`);
             await getVm().fs.writeTextFile(`${remoteDir}/${reqFileName}`, reqContent);
-            const remotePip = await getVm().exec(
+            const remotePip = await exec(
               `python3 -m pip install --no-cache-dir --prefer-binary --break-system-packages -r "${remoteDir}/${reqFileName}"`
             );
             if (remotePip.stdout) {
@@ -1943,9 +1898,9 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
       (async () => {
         try {
           const pkgContent = fs.readFileSync(path.join(sDir, pkgFileName), "utf-8");
-          await getVm().exec(`mkdir -p "${remoteDir}"`);
+          await exec(`mkdir -p "${remoteDir}"`);
           await getVm().fs.writeTextFile(`${remoteDir}/${pkgFileName}`, pkgContent);
-          const npmRes = await getVm().exec(`cd "${remoteDir}" && npm install --prefer-offline --no-audit`);
+          const npmRes = await exec(`cd "${remoteDir}" && npm install --prefer-offline --no-audit`);
           if (npmRes.stdout) addServerLog(serverId, "stdout", npmRes.stdout.trim());
           addServerLog(serverId, "system", `✅ [Freestyle VPS] NPM packages installed.`);
           onComplete?.(true);
@@ -1960,7 +1915,7 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
     if (goModFileName) {
       (async () => {
         try {
-          await getVm().exec(`cd "${remoteDir}" && go mod tidy`);
+          await exec(`cd "${remoteDir}" && go mod tidy`);
           onComplete?.(true);
         } catch {
           onComplete?.(true);
@@ -1991,18 +1946,18 @@ function killServerProcess(serverId: string) {
   }
 
   // 1. Terminate Docker container if running
-  getVm().exec(`docker rm -f "${containerName}" 2>/dev/null || true`).catch(() => {});
+  exec(`docker rm -f "${containerName}" 2>/dev/null || true`).catch(() => {});
   if (runtime && runtime.dockerContainerId) {
-    getVm().exec(`docker rm -f "${runtime.dockerContainerId}" 2>/dev/null || true`).catch(() => {});
+    exec(`docker rm -f "${runtime.dockerContainerId}" 2>/dev/null || true`).catch(() => {});
     runtime.dockerContainerId = null;
   }
 
   // 2. Kill on Freestyle VM host using tracked remote PID, pid file, and cwd matching
   if (runtime && runtime.remotePid) {
-    getVm().exec(`kill -9 ${runtime.remotePid} 2>/dev/null || true`).catch(() => {});
+    exec(`kill -9 ${runtime.remotePid} 2>/dev/null || true`).catch(() => {});
     runtime.remotePid = null;
   }
-  getVm().exec(`
+  exec(`
     if [ -f "${remoteDir}/server.pid" ]; then
       kill -9 $(cat "${remoteDir}/server.pid") 2>/dev/null || true
       rm -f "${remoteDir}/server.pid"
@@ -2146,8 +2101,8 @@ app.post("/api/servers/action", (req, res) => {
         await syncLocalDirectoryToVm(sDir, remoteDir);
 
         // 2. Remove any previous container with this name
-        await getVm().exec(`docker rm -f "${containerName}" 2>/dev/null || true`);
-        await getVm().exec(`mkdir -p "${remoteDir}" && rm -f "${remoteDir}/process.log" "${remoteDir}/server.pid"`);
+        await exec(`docker rm -f "${containerName}" 2>/dev/null || true`);
+        await exec(`mkdir -p "${remoteDir}" && rm -f "${remoteDir}/process.log" "${remoteDir}/server.pid"`);
 
         // 3. Prepare Docker environment flags
         const dockerEnvFlags: string[] = [
@@ -2169,7 +2124,7 @@ app.post("/api/servers/action", (req, res) => {
         const dockerRunCmd = `docker run -d --name "${containerName}" ${portFlag} ${dockerEnvFlags.join(" ")} -v "${remoteDir}":/app -v /opt/freestyle/python:/opt/freestyle/python:ro -w /app python:3.12-slim sh -c "${cmdStr.replace(/"/g, '\\"')} > /app/process.log 2>&1"`;
 
         addServerLog(server.id, "system", `📦 Initializing isolated Docker sandbox...`);
-        const runRes = await getVm().exec(dockerRunCmd);
+        const runRes = await exec(dockerRunCmd);
         const containerId = (runRes.stdout || "").trim().slice(0, 12);
         runtime.dockerContainerId = containerId || containerName;
 
@@ -2193,7 +2148,7 @@ app.post("/api/servers/action", (req, res) => {
 
           try {
             // Read from process.log mounted on host or docker logs
-            const logRes = await getVm().exec(`cat "${remoteDir}/process.log" 2>/dev/null || docker logs --tail 50 "${containerName}" 2>/dev/null || true`);
+            const logRes = await exec(`cat "${remoteDir}/process.log" 2>/dev/null || docker logs --tail 50 "${containerName}" 2>/dev/null || true`);
             if (logRes.stdout && logRes.stdout.length > lastLogLength) {
               const newContent = logRes.stdout.slice(lastLogLength);
               lastLogLength = logRes.stdout.length;
@@ -2207,7 +2162,7 @@ app.post("/api/servers/action", (req, res) => {
             }
 
             // Check if Docker container is still running
-            const inspectRes = await getVm().exec(`docker inspect -f '{{.State.Running}}' "${containerName}" 2>/dev/null || echo "false"`);
+            const inspectRes = await exec(`docker inspect -f '{{.State.Running}}' "${containerName}" 2>/dev/null || echo "false"`);
             const isAlive = inspectRes.stdout && inspectRes.stdout.trim() === "true";
 
             if (!isAlive) {
@@ -2475,7 +2430,7 @@ app.post("/api/servers/:id/files/rename", async (req, res) => {
 
   try {
     fs.renameSync(oldPath, newPath);
-    await getVm().exec(`mv "/home/container/${id}/${path.basename(oldName)}" "/home/container/${id}/${path.basename(newName)}" || true`);
+    await exec(`mv "/home/container/${id}/${path.basename(oldName)}" "/home/container/${id}/${path.basename(newName)}" || true`);
     addServerLog(id, "system", `✏️ Renamed on VPS: ${path.basename(oldName)} to ${path.basename(newName)}`);
     res.json({ success: true, name: path.basename(newName) });
   } catch (err: any) {
@@ -2859,7 +2814,7 @@ app.post("/api/cloud-vm/exec", async (req, res) => {
   const { command = "python3 --version" } = req.body;
 
   try {
-    const vmExecRes = await getVm().exec(command);
+    const vmExecRes = await exec(command);
     const output = (vmExecRes.stdout || "") + (vmExecRes.stderr ? `\n${vmExecRes.stderr}` : "");
     res.json({
       success: true,
@@ -2878,10 +2833,10 @@ app.post("/api/cloud-vm/exec", async (req, res) => {
 // 17. Architecture Pipeline & Docker Status API
 app.get("/api/pipeline/architecture", async (req, res) => {
   try {
-    const dockerInfoRes = await getVm().exec('docker ps -a --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}" || true');
-    const dockerVerRes = await getVm().exec('docker info --format "{{.ServerVersion}}" 2>/dev/null || docker --version || true');
-    const pyVerRes = await getVm().exec('python3 --version 2>/dev/null || true');
-    const uptimeRes = await getVm().exec('uptime -p 2>/dev/null || uptime || true');
+    const dockerInfoRes = await exec('docker ps -a --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}" || true');
+    const dockerVerRes = await exec('docker info --format "{{.ServerVersion}}" 2>/dev/null || docker --version || true');
+    const pyVerRes = await exec('python3 --version 2>/dev/null || true');
+    const uptimeRes = await exec('uptime -p 2>/dev/null || uptime || true');
 
     const architectureFlow = {
       pipeline: [
