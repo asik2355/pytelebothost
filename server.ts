@@ -1555,18 +1555,118 @@ function addServerLog(serverId: string, type: BotLog["type"], message: string) {
 const DEFAULT_SERVERS: ServerRecord[] = [];
 
 function getServersData(): ServerRecord[] {
+  let servers: ServerRecord[] = [];
   try {
     if (fs.existsSync(SERVERS_FILE)) {
       const data = fs.readFileSync(SERVERS_FILE, "utf-8");
       const parsed = JSON.parse(data);
       if (Array.isArray(parsed)) {
-        return parsed;
+        servers = parsed;
       }
     }
   } catch {
     // fallback
   }
-  return DEFAULT_SERVERS;
+
+  // Also auto-discover any server directories in USER_SERVERS_DIR that are not yet in SERVERS_FILE
+  try {
+    if (fs.existsSync(USER_SERVERS_DIR)) {
+      const entries = fs.readdirSync(USER_SERVERS_DIR, { withFileTypes: true });
+      let updated = false;
+      for (const ent of entries) {
+        if (ent.isDirectory()) {
+          const srvId = ent.name;
+          if (!servers.some((s) => s.id === srvId)) {
+            const cfgFile = path.join(USER_SERVERS_DIR, srvId, ".config.json");
+            let cfg: any = null;
+            if (fs.existsSync(cfgFile)) {
+              try {
+                cfg = JSON.parse(fs.readFileSync(cfgFile, "utf-8"));
+              } catch {}
+            }
+            const numId = parseInt(srvId.replace(/\D/g, "").slice(-4)) || Math.floor(1000 + Math.random() * 9000);
+            const defaultPort = 25000 + (numId % 2000);
+            servers.push({
+              id: srvId,
+              name: cfg?.serverName || "Survivor Realm",
+              category: cfg?.category || "python3",
+              region: cfg?.region || "EU-Central • Germany",
+              status: "STOPPED",
+              ramUsage: "0 MB",
+              cpuUsage: "0%",
+              diskUsage: "0 MB",
+              daysLeft: "30 Days",
+              planName: "Survivor Standard",
+              planPrice: 0,
+              createdAt: new Date().toISOString(),
+              port: cfg?.port || defaultPort,
+              ip: cfg?.ip || "104.207.76.33",
+              startupCommand: cfg?.startupCommand || "python3 main.py",
+              envVars: cfg?.envVars || [],
+            });
+            updated = true;
+          }
+        }
+      }
+      if (updated) {
+        saveServersData(servers);
+      }
+    }
+  } catch {}
+
+  return servers;
+}
+
+function findServer(serverId: string): ServerRecord | null {
+  if (!serverId) return null;
+  const safeId = path.basename(serverId);
+  const servers = getServersData();
+  const existing = servers.find((s) => s.id === safeId);
+  if (existing) return existing;
+
+  // Auto-reconstruct server on the fly if requested from frontend/cloud
+  const sDir = getServerDir(safeId);
+  if (!fs.existsSync(sDir)) {
+    fs.mkdirSync(sDir, { recursive: true });
+  }
+
+  const cfgFile = getServerConfigFile(safeId);
+  let cfg: any = null;
+  if (fs.existsSync(cfgFile)) {
+    try {
+      cfg = JSON.parse(fs.readFileSync(cfgFile, "utf-8"));
+    } catch {}
+  }
+
+  const numId = parseInt(safeId.replace(/\D/g, "").slice(-4)) || Math.floor(1000 + Math.random() * 9000);
+  const defaultPort = 25000 + (numId % 2000);
+  const newServer: ServerRecord = {
+    id: safeId,
+    name: cfg?.serverName || "Survivor Realm",
+    category: cfg?.category || "python3",
+    region: cfg?.region || "EU-Central • Germany",
+    status: "STOPPED",
+    ramUsage: "0 MB",
+    cpuUsage: "0%",
+    diskUsage: "0 MB",
+    daysLeft: "30 Days",
+    planName: "Survivor Standard",
+    planPrice: 0,
+    createdAt: new Date().toISOString(),
+    port: cfg?.port || defaultPort,
+    ip: cfg?.ip || "104.207.76.33",
+    startupCommand: cfg?.startupCommand || "python3 main.py",
+    envVars: cfg?.envVars || [
+      { key: "SERVER_NAME", value: cfg?.serverName || "Survivor Realm" },
+      { key: "PORT", value: (cfg?.port || defaultPort).toString() },
+      { key: "PYTHONUNBUFFERED", value: "1" },
+    ],
+  };
+
+  servers.push(newServer);
+  saveServersData(servers);
+  ensureServerWorkspace(newServer);
+  return newServer;
 }
 
 function saveServersData(servers: ServerRecord[]) {
@@ -1991,8 +2091,7 @@ function killServerProcess(serverId: string) {
 // 3. Server Actions: Start, Stop, Restart (Per Server Process Isolation)
 app.post("/api/servers/action", (req, res) => {
   const { serverId, action } = req.body;
-  const servers = getServersData();
-  const server = servers.find((s) => s.id === serverId);
+  const server = findServer(serverId);
 
   if (!server) {
     return res.status(404).json({ error: "Server not found" });
@@ -2178,8 +2277,7 @@ app.post("/api/servers/action", (req, res) => {
 // 4. Server Details & Config API
 app.get("/api/servers/:id/details", (req, res) => {
   const { id } = req.params;
-  const servers = getServersData();
-  const server = servers.find((s) => s.id === id);
+  const server = findServer(id);
   if (!server) {
     return res.status(404).json({ error: "Server not found" });
   }
@@ -2202,8 +2300,7 @@ app.get("/api/servers/:id/details", (req, res) => {
 // 5. Update Server Config
 app.post("/api/servers/:id/config", (req, res) => {
   const { id } = req.params;
-  const servers = getServersData();
-  const server = servers.find((s) => s.id === id);
+  const server = findServer(id);
   if (!server) {
     return res.status(404).json({ error: "Server not found" });
   }
@@ -2213,7 +2310,12 @@ app.post("/api/servers/:id/config", (req, res) => {
 
   if (name && typeof name === "string" && name.trim()) {
     server.name = name.trim();
-    saveServersData(servers);
+    const servers = getServersData();
+    const idx = servers.findIndex((s) => s.id === id);
+    if (idx !== -1) {
+      servers[idx].name = name.trim();
+      saveServersData(servers);
+    }
   }
 
   if (startupCommand && typeof startupCommand === "string") {
@@ -2241,8 +2343,7 @@ app.post("/api/servers/:id/config", (req, res) => {
 // 6. Server Files List
 app.get("/api/servers/:id/files", (req, res) => {
   const { id } = req.params;
-  const servers = getServersData();
-  const server = servers.find((s) => s.id === id);
+  const server = findServer(id);
   if (!server) {
     return res.status(404).json({ error: "Server not found" });
   }
@@ -2424,6 +2525,7 @@ const serverMulter = multer({
 
 app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), async (req, res) => {
   const { id } = req.params;
+  const server = findServer(id);
   const rawFiles = (req.files as Express.Multer.File[]) || (req.file ? [req.file] : []);
   if (!rawFiles || rawFiles.length === 0) {
     return res.status(400).json({ error: "No files uploaded" });
@@ -2467,8 +2569,7 @@ app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), async
 // 10a. Explicit Dependency Install Trigger
 app.post("/api/servers/:id/install", (req, res) => {
   const { id } = req.params;
-  const servers = getServersData();
-  const server = servers.find((s) => s.id === id);
+  const server = findServer(id);
   if (!server) {
     return res.status(404).json({ error: "Server not found" });
   }
@@ -2601,8 +2702,7 @@ app.post("/api/servers/:id/logs/clear", (req, res) => {
 app.post("/api/servers/:id/command", (req, res) => {
   const { id } = req.params;
   const { command } = req.body;
-  const servers = getServersData();
-  const server = servers.find((s) => s.id === id);
+  const server = findServer(id);
   if (!server) {
     return res.status(404).json({ error: "Server not found" });
   }
@@ -2685,8 +2785,7 @@ app.post("/api/servers/:id/command", (req, res) => {
 // 13. Reinstall Server (Reset to pristine category starter)
 app.post("/api/servers/:id/reinstall", (req, res) => {
   const { id } = req.params;
-  const servers = getServersData();
-  const server = servers.find((s) => s.id === id);
+  const server = findServer(id);
   if (!server) {
     return res.status(404).json({ error: "Server not found" });
   }
@@ -2695,7 +2794,12 @@ app.post("/api/servers/:id/reinstall", (req, res) => {
   // Stop and clean up any processes
   killServerProcess(id);
   server.status = "STOPPED";
-  saveServersData(servers);
+  const servers = getServersData();
+  const idx = servers.findIndex((s) => s.id === id);
+  if (idx !== -1) {
+    servers[idx].status = "STOPPED";
+    saveServersData(servers);
+  }
 
   try {
     // Delete all files in directory except .config.json
@@ -2721,7 +2825,11 @@ app.delete("/api/servers/:id", (req, res) => {
   const target = servers.find((s) => s.id === id);
 
   if (!target) {
-    return res.status(404).json({ error: "Server not found" });
+    const sDir = getServerDir(id);
+    if (fs.existsSync(sDir)) {
+      try { fs.rmSync(sDir, { recursive: true, force: true }); } catch {}
+    }
+    return res.json({ success: true, message: "Server removed" });
   }
 
   // Kill running processes completely
