@@ -2438,7 +2438,7 @@ app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), (req,
     uploadedNames.push(uploadedName);
     const isZip = uploadedName.toLowerCase().endsWith(".zip");
 
-    addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${f.size} bytes)`);
+    addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${f.size} bytes) saved to ${f.path}`);
 
     if (isZip) {
       addServerLog(id, "system", `📦 Auto-extracting ZIP archive: ${uploadedName}...`);
@@ -2447,7 +2447,7 @@ app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), (req,
           addServerLog(id, "stderr", `⚠️ Unzip error: ${unzipErr.message}`);
         } else {
           addServerLog(id, "system", `✅ ZIP contents successfully extracted.`);
-          fs.rmSync(f.path, { force: true });
+          try { fs.rmSync(f.path, { force: true }); } catch (e) {}
         }
       });
     }
