@@ -12,6 +12,7 @@ import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore, Firestore } from "firebase-admin/firestore";
 
 
+const app = express();
 app.use(cors());
 const PORT = 3000;
 const WORKSPACE_DIR = path.join(process.cwd(), "bot_workspace");
