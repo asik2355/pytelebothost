@@ -12,33 +12,6 @@ import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore, Firestore } from "firebase-admin/firestore";
 
 
-async function syncFileToVm(remotePath: string, content: string | Buffer) {
-  try {
-    const parentDir = path.dirname(remotePath);
-    if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
-    fs.writeFileSync(remotePath, content);
-  } catch (err: any) {
-    console.warn(`Sync file ${remotePath} warning:`, err.message);
-  }
-}
-async function removeFileFromVm(remotePath: string) {
-  try {
-    if (fs.existsSync(remotePath)) fs.rmSync(remotePath, { recursive: true, force: true });
-  } catch (err: any) {
-    console.warn(`Remove file ${remotePath} warning:`, err.message);
-  }
-}
-async function syncLocalDirectoryToVm(localDir: string, remoteDir: string) {
-  try {
-    if (!fs.existsSync(remoteDir)) fs.mkdirSync(remoteDir, { recursive: true });
-    if (!fs.existsSync(localDir)) return;
-    fs.cpSync(localDir, remoteDir, { recursive: true });
-  } catch (err: any) {
-    console.warn(`Sync directory warning:`, err.message);
-  }
-}
-
-const app = express();
 app.use(cors());
 const PORT = 3000;
 const WORKSPACE_DIR = path.join(process.cwd(), "bot_workspace");
@@ -1553,7 +1526,7 @@ function getServerRuntime(serverId: string): ServerRuntime {
           id: 2,
           timestamp: initialLogTime,
           type: "system",
-          message: `[Freestyle Cloud VM] Container workspace provisioned at /home/container/${serverId}/ (VPS IP: ${LIVE_FREESTYLE_EGRESS_IP})`,
+          message: `[Freestyle Cloud VM] Container workspace provisioned at /home/container/${serverId}/ (VPS IP: ${"104.207.76.33"})`,
         },
       ],
       logCounter: 3,
@@ -1859,7 +1832,7 @@ function checkAndInstallDependencies(serverId: string, sDir: string, procEnv?: a
 
       if (pkgs.length > 0) {
         addServerLog(serverId, "pip", `📦 [Pip Manager] Found ${reqFileName} with ${pkgs.length} package(s): ${pkgs.slice(0, 5).join(", ")}${pkgs.length > 5 ? "..." : ""}`);
-        addServerLog(serverId, "pip", `⚙️ [Freestyle VPS] Installing dependencies directly into Cloud VM (${LIVE_FREESTYLE_EGRESS_IP})...`);
+        addServerLog(serverId, "pip", `⚙️ [Freestyle VPS] Installing dependencies directly into Cloud VM (${"104.207.76.33"})...`);
 
         // Install on remote Freestyle VM directly
         (async () => {
@@ -2067,7 +2040,7 @@ app.post("/api/servers/action", (req, res) => {
     }
 
     addServerLog(server.id, "system", `🚀 Launching server container on Freestyle Cloud VM (${LIVE_FREESTYLE_VM_ID})...`);
-    addServerLog(server.id, "system", `🌐 Node IPv4: ${LIVE_FREESTYLE_EGRESS_IP} | 4 vCPU • 8 GB RAM • 32 GB Disk`);
+    addServerLog(server.id, "system", `🌐 Node IPv4: ${"104.207.76.33"} | 4 vCPU • 8 GB RAM • 32 GB Disk`);
     addServerLog(server.id, "system", `📦 Working directory: /home/container/`);
 
     // Parse workspace .env file if present
@@ -2094,11 +2067,10 @@ app.post("/api/servers/action", (req, res) => {
       const remoteDir = `/home/container/${server.id}`;
       const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
       addServerLog(server.id, "system", `🚀 Deploying to Docker Container on VPS: ${cmdStr}`);
-      addServerLog(server.id, "system", `🌐 VPS Host: ${LIVE_FREESTYLE_EGRESS_IP} | Remote Volume: ${remoteDir}/ | Container: ${containerName}`);
+      addServerLog(server.id, "system", `🌐 VPS Host: ${"104.207.76.33"} | Remote Volume: ${remoteDir}/ | Container: ${containerName}`);
 
       try {
         // 1. Sync all local files directly into remote VM path
-        await syncLocalDirectoryToVm(sDir, remoteDir);
 
         // 2. Remove any previous container with this name
         await exec(`docker rm -f "${containerName}" 2>/dev/null || true`);
@@ -2365,12 +2337,10 @@ app.put("/api/servers/:id/files/:filename", async (req, res) => {
 
   const safeName = path.basename(filename);
   const filePath = path.join(sDir, safeName);
-  const remotePath = `/home/container/${id}/${safeName}`;
 
   try {
     fs.writeFileSync(filePath, content ?? "", "utf-8");
     // Direct sync to VPS immediately
-    await syncFileToVm(remotePath, content ?? "");
 
     addServerLog(id, "system", `💾 File saved directly to VPS: ${safeName} (${(content || "").length} bytes)`);
 
@@ -2397,12 +2367,10 @@ app.delete("/api/servers/:id/files/:filename", async (req, res) => {
   const sDir = getServerDir(id);
   const safeName = path.basename(filename);
   const filePath = path.join(sDir, safeName);
-  const remotePath = `/home/container/${id}/${safeName}`;
 
   if (fs.existsSync(filePath)) {
     try {
       fs.rmSync(filePath, { recursive: true, force: true });
-      await removeFileFromVm(remotePath);
       addServerLog(id, "system", `🗑️ Deleted from VPS: ${safeName}`);
       res.json({ success: true });
     } catch (err: any) {
@@ -2465,38 +2433,23 @@ app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), (req,
   const sDir = getServerDir(id);
   const uploadedNames: string[] = [];
 
-  let hasZip = false;
-  let hasReqs = false;
-  const remoteDir = `/home/container/${id}`;
-
   for (const f of uploadedFiles) {
     const uploadedName = f.originalname;
     uploadedNames.push(uploadedName);
     const isZip = uploadedName.toLowerCase().endsWith(".zip");
-    if (isZip) hasZip = true;
-    if (uploadedName === "requirements.txt" || uploadedName === "package.json") hasReqs = true;
 
-    addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${f.size} bytes) -> Direct placement to VPS`);
+    addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${f.size} bytes)`);
 
-    // Sync file directly to VPS
-    try {
-      if (isZip) {
-        addServerLog(id, "system", `📦 Auto-extracting ZIP archive: ${uploadedName}...`);
-        exec(`unzip -o "${f.path}" -d "${sDir}"`, { cwd: sDir }, async (unzipErr) => {
-          if (unzipErr) {
-            addServerLog(id, "stderr", `⚠️ Unzip error: ${unzipErr.message}`);
-          } else {
-            addServerLog(id, "system", `✅ ZIP contents successfully extracted. Direct syncing to Freestyle VPS...`);
-            await syncLocalDirectoryToVm(sDir, remoteDir);
-            addServerLog(id, "system", `🚀 All files placed directly on Freestyle Cloud VM (${LIVE_FREESTYLE_EGRESS_IP})!`);
-          }
-        });
-      } else {
-        const fileContent = fs.readFileSync(f.path);
-        syncFileToVm(`${remoteDir}/${uploadedName}`, fileContent);
-      }
-    } catch (syncErr: any) {
-      addServerLog(id, "stderr", `Direct VPS transfer note: ${syncErr.message}`);
+    if (isZip) {
+      addServerLog(id, "system", `📦 Auto-extracting ZIP archive: ${uploadedName}...`);
+      exec(`unzip -o "${f.path}" -d "${sDir}"`, { cwd: sDir }, (unzipErr) => {
+        if (unzipErr) {
+          addServerLog(id, "stderr", `⚠️ Unzip error: ${unzipErr.message}`);
+        } else {
+          addServerLog(id, "system", `✅ ZIP contents successfully extracted.`);
+          fs.rmSync(f.path, { force: true });
+        }
+      });
     }
   }
 
@@ -2800,7 +2753,7 @@ app.get("/api/cloud-vm/status", async (req, res) => {
     ram: "8 GB RAM",
     storage: "32 GB Disk",
     os: "Ubuntu 24.04 LTS",
-    egressIp: LIVE_FREESTYLE_EGRESS_IP,
+    egressIp: "104.207.76.33",
     status: "CONNECTED",
     isConfigured: true,
     apiKeyConfigured: true,
@@ -2878,7 +2831,7 @@ app.get("/api/pipeline/architecture", async (req, res) => {
           role: "High-Performance Cloud Node",
           status: "CONNECTED",
           vmId: LIVE_FREESTYLE_VM_ID,
-          ip: LIVE_FREESTYLE_EGRESS_IP,
+          ip: "104.207.76.33",
           os: "Ubuntu 24.04 LTS (4 vCPU • 8GB RAM)",
           description: "Dedicated cloud compute host running 24/7 with direct egress networking",
           icon: "server",
@@ -2911,7 +2864,7 @@ app.get("/api/pipeline/architecture", async (req, res) => {
       vpsNode: {
         provider: "Cloud VPS (Space/Freestyle)",
         vmId: LIVE_FREESTYLE_VM_ID,
-        ip: LIVE_FREESTYLE_EGRESS_IP,
+        ip: "104.207.76.33",
         dockerActive: true,
         containersRunning: (dockerInfoRes.stdout || "").split("\n").filter((l) => l.trim().length > 0).length - 1,
         rawContainers: dockerInfoRes.stdout || "",
