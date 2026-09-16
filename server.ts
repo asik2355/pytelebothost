@@ -1658,7 +1658,7 @@ function getServerRuntime(serverId: string): ServerRuntime {
           id: 2,
           timestamp: initialLogTime,
           type: "system",
-          message: `[VPS Docker Node] Container workspace provisioned at /home/container/${serverId}/ (Host IP: 104.207.76.33)`,
+          message: `[System] Server workspace initialized at /home/container/`,
         },
       ],
       logCounter: 3,
@@ -2092,39 +2092,25 @@ async function isDockerDaemonRunning(): Promise<boolean> {
   }
 }
 
-async function ensureDockerOnHost(serverId?: string): Promise<boolean> {
+async function ensureDockerOnHost(_serverId?: string): Promise<boolean> {
   if (await isDockerDaemonRunning()) {
     return true;
   }
 
   if (await isDockerInstalledOnHost()) {
-    if (serverId) addServerLog(serverId, "system", "⚙️ Starting Docker service on VPS host (systemctl start docker)...");
     try {
       await exec("systemctl start docker 2>/dev/null || service docker start 2>/dev/null");
       if (await isDockerDaemonRunning()) {
-        if (serverId) addServerLog(serverId, "system", "✅ Docker service started successfully.");
         return true;
       }
     } catch {}
   }
 
-  // Not installed - auto-install Docker on the VPS host
-  if (serverId) {
-    addServerLog(serverId, "system", "⚠️ Docker not detected on VPS host. Installing Docker engine via apt-get...");
-  }
+  // Auto-install Docker quietly in the background if not present
   try {
     await exec("DEBIAN_FRONTEND=noninteractive apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io && systemctl enable --now docker");
-    const ready = await isDockerDaemonRunning();
-    if (ready) {
-      if (serverId) addServerLog(serverId, "system", "✅ Docker Engine successfully installed and active on VPS host!");
-      return true;
-    }
-  } catch (err: any) {
-    if (serverId) {
-      addServerLog(serverId, "stderr", `Docker installation note: ${err.message}`);
-      addServerLog(serverId, "system", "💡 Tip: Run 'apt-get update && apt-get install -y docker.io' directly on your VPS terminal if apt was locked.");
-    }
-  }
+    return await isDockerDaemonRunning();
+  } catch {}
   return false;
 }
 
@@ -2148,15 +2134,12 @@ function checkAndInstallDependencies(serverId: string, sDir: string, _procEnv?: 
       const pkgs = reqContent.split("\n").map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith("#"));
 
       if (pkgs.length > 0) {
-        addServerLog(serverId, "pip", `📦 [Isolated Dependency Manager] Detected ${reqFileName} with ${pkgs.length} package(s): ${pkgs.slice(0, 5).join(", ")}${pkgs.length > 5 ? "..." : ""}`);
-        addServerLog(serverId, "pip", `🔒 Dependencies will be installed inside the bot's isolated Docker container (VPS host environment remains 100% clean).`);
+        addServerLog(serverId, "pip", `📦 Found ${reqFileName} with ${pkgs.length} package(s): ${pkgs.slice(0, 5).join(", ")}${pkgs.length > 5 ? "..." : ""}`);
       }
     } else if (pkgFileName) {
-      addServerLog(serverId, "system", `📦 [Isolated NPM Manager] Detected package.json for container sandbox installation.`);
+      addServerLog(serverId, "system", `📦 Found package.json for Node.js dependencies.`);
     }
-  } catch (err: any) {
-    addServerLog(serverId, "stderr", `Dependency scan notice: ${err.message}`);
-  }
+  } catch {}
 
   onComplete?.(true);
 }
@@ -2287,9 +2270,8 @@ app.post("/api/servers/action", (req, res) => {
       cmdStr = cmdStr.replace("python3 ", "python3 -u ");
     }
 
-    addServerLog(server.id, "system", `🚀 Launching server container on VPS Node (104.207.76.33)...`);
-    addServerLog(server.id, "system", `🌐 Node IPv4: ${"104.207.76.33"} | 4 vCPU • 8 GB RAM • 32 GB Disk`);
-    addServerLog(server.id, "system", `📦 Working directory: /home/container/`);
+    addServerLog(server.id, "system", `[Container] Preparing sandbox environment...`);
+    addServerLog(server.id, "system", `[Container] Working directory: /home/container/`);
 
     // Parse workspace .env file if present
     const serverEnvFile = path.join(sDir, ".env");
@@ -2321,8 +2303,7 @@ app.post("/api/servers/action", (req, res) => {
       const dockerAvailable = await ensureDockerOnHost(server.id);
 
       if (dockerAvailable) {
-        addServerLog(server.id, "system", `🚀 Deploying to isolated Docker container on VPS: ${cmdStr}`);
-        addServerLog(server.id, "system", `🌐 VPS Host: 104.207.76.33 | Mounted Volume: ${remoteDir} -> /home/container | Container: ${containerName}`);
+        addServerLog(server.id, "system", `🚀 Launching process: ${cmdStr}`);
 
         try {
           await stopAndRemoveDockerContainer(containerName);
@@ -2353,28 +2334,25 @@ app.post("/api/servers/action", (req, res) => {
           }
 
           // Generate isolated .entrypoint.sh script inside bot's container volume
-          // This executes INSIDE the Docker container: installs dependencies in the container sandbox only,
-          // keeping the host VPS Python environment 100% clean and preventing any package collisions.
           const entrypointPath = path.join(sDir, ".entrypoint.sh");
           const entrypointScript = `#!/bin/sh
 cd /home/container
-echo "[SYSTEM] Initializing container sandbox environment..." >> /home/container/process.log
+echo "[Container] Initializing environment..." >> /home/container/process.log
 
 if [ -f requirements.txt ]; then
-  echo "📦 [Docker Container] Preparing requirements.txt..." >> /home/container/process.log
+  echo "📦 Installing Python dependencies from requirements.txt..." >> /home/container/process.log
   tr -d '\\r' < requirements.txt > /tmp/requirements_clean.txt
-  echo "📦 [Docker Container] Installing all Python packages inside isolated container..." >> /home/container/process.log
   pip install --no-cache-dir --prefer-binary --ignore-installed -r /tmp/requirements_clean.txt >> /home/container/process.log 2>&1
-  echo "✅ [Docker Container] All requirements.txt packages installed successfully." >> /home/container/process.log
+  echo "✅ Dependencies installed successfully." >> /home/container/process.log
 fi
 
 if [ -f package.json ]; then
-  echo "📦 [Docker Container] Installing npm dependencies inside container..." >> /home/container/process.log
+  echo "📦 Installing npm dependencies..." >> /home/container/process.log
   npm install --prefer-offline >> /home/container/process.log 2>&1
-  echo "✅ [Docker Container] NPM packages ready." >> /home/container/process.log
+  echo "✅ Dependencies installed successfully." >> /home/container/process.log
 fi
 
-echo "🚀 [Docker Container] Starting bot application: ${cmdStr}" >> /home/container/process.log
+echo "🚀 Starting server: ${cmdStr}" >> /home/container/process.log
 exec ${cmdStr} >> /home/container/process.log 2>&1
 `;
           fs.writeFileSync(entrypointPath, entrypointScript, { mode: 0o777 });
@@ -2390,8 +2368,7 @@ exec ${cmdStr} >> /home/container/process.log 2>&1
           server.status = "RUNNING";
           enrichServerStats(server);
 
-          addServerLog(server.id, "system", `✅ Isolated Docker container active (${containerName}) [ID: ${containerId || "RUNNING"}]`);
-          addServerLog(server.id, "system", `📦 Container volume mounted: ${remoteDir} -> /home/container/`);
+          addServerLog(server.id, "system", `✅ Container environment ready.`);
 
           // Stream logs from process.log
           let lastLogLength = 0;
@@ -2426,24 +2403,25 @@ exec ${cmdStr} >> /home/container/process.log 2>&1
                 if (runtime.pollTimer) clearInterval(runtime.pollTimer);
                 runtime.pollTimer = null;
                 server.status = "STOPPED";
-                addServerLog(server.id, "system", `⏹️ Docker container exited or stopped`);
+                addServerLog(server.id, "system", `⏹️ Server container stopped.`);
                 saveServersData(servers);
               }
             } catch {}
           }, 1200);
 
           saveServersData(servers);
-          addServerLog(server.id, "system", `✅ Container running & listening on 0.0.0.0:${config.port}`);
+          if (config.port) {
+            addServerLog(server.id, "system", `✅ Container listening on 0.0.0.0:${config.port}`);
+          }
           return res.json({ success: true, server, pid: 7777 });
         } catch (dockerErr: any) {
-          addServerLog(server.id, "stderr", `Docker launch notice: ${dockerErr.message}. Falling back to private virtualenv...`);
+          addServerLog(server.id, "stderr", `Container launch notice: ${dockerErr.message}. Starting native fallback...`);
         }
       }
 
-      // ISOLATED VIRTUALENV FALLBACK (If Docker cannot be started, keeps host VPS Python clean)
-      addServerLog(server.id, "system", `⚠️ Docker daemon unavailable. Running in bot-private virtualenv: ${remoteDir}/.venv`);
-      addServerLog(server.id, "system", `🌐 Node IPv4: 104.207.76.33 | 4 vCPU • 8 GB RAM • 32 GB Disk`);
-      addServerLog(server.id, "system", `📦 Working directory: ${remoteDir}/`);
+      // ISOLATED VIRTUALENV FALLBACK (If Docker cannot be started)
+      addServerLog(server.id, "system", `[System] Starting isolated execution environment...`);
+      addServerLog(server.id, "system", `[System] Working directory: /home/container/`);
 
       try {
         const venvDir = path.join(remoteDir, ".venv");
@@ -2543,7 +2521,7 @@ exec ${cmdStr} >> /home/container/process.log 2>&1
           saveServersData(servers);
         });
 
-        addServerLog(server.id, "system", `✅ Bot daemon running in private virtualenv (PID: ${childProc.pid})`);
+        addServerLog(server.id, "system", `✅ Server process active (PID: ${childProc.pid})`);
         saveServersData(servers);
         return res.json({ success: true, server, pid: childProc.pid });
       } catch (nativeErr: any) {
@@ -2769,10 +2747,10 @@ async function handleUploadFiles(req: express.Request, res: express.Response) {
     uploadedNames.push(uploadedName);
     const isZip = uploadedName.toLowerCase().endsWith(".zip");
 
-    addServerLog(server.id, "system", `📁 File received into container volume: ${uploadedName} (${f.size} bytes)`);
+    addServerLog(server.id, "system", `📁 File received: ${uploadedName} (${f.size} bytes)`);
 
     if (isZip) {
-      addServerLog(server.id, "system", `📦 Auto-extracting ZIP into persistent Docker volume /home/container/...`);
+      addServerLog(server.id, "system", `📦 Extracting ZIP archive into /home/container/...`);
       let extracted = false;
       try {
         await exec(`unzip -o "${f.path}" -d "${sDir}"`, { cwd: sDir });
@@ -2935,7 +2913,7 @@ async function handleSaveFile(req: express.Request, res: express.Response) {
     fs.writeFileSync(filePath, content, "utf-8");
     try { fs.chmodSync(filePath, 0o777); } catch {}
 
-    addServerLog(server.id, "system", `💾 File saved to container volume /home/container/${safeName} (${content.length} bytes)`);
+    addServerLog(server.id, "system", `💾 File saved: /home/container/${safeName} (${content.length} bytes)`);
 
     // Sync to running container
     const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
@@ -2977,7 +2955,7 @@ async function handleCreateDirectory(req: express.Request, res: express.Response
   try {
     if (!fs.existsSync(targetPath)) {
       fs.mkdirSync(targetPath, { recursive: true, mode: 0o777 });
-      addServerLog(server.id, "system", `📁 Folder created in container volume: /home/container/${safeName}`);
+      addServerLog(server.id, "system", `📁 Folder created: /home/container/${safeName}`);
       const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
       try {
         await exec(`docker exec "${containerName}" mkdir -p "/home/container/${safeName}" 2>/dev/null || true`);
@@ -2992,7 +2970,7 @@ async function handleCreateDirectory(req: express.Request, res: express.Response
 app.post("/api/files/folder", handleCreateDirectory);
 app.post("/api/servers/:id/directories", handleCreateDirectory);
 
-// 7. Delete File or Directory from Docker Container Volume
+// 7. Delete File or Directory
 async function handleDeleteFile(req: express.Request, res: express.Response) {
   const auth = await resolveAndAuthorizeServer(req, res);
   if (!auth) return;
@@ -3009,24 +2987,24 @@ async function handleDeleteFile(req: express.Request, res: express.Response) {
   if (fs.existsSync(filePath)) {
     try {
       fs.rmSync(filePath, { recursive: true, force: true });
-      addServerLog(server.id, "system", `🗑️ Deleted from container volume: /home/container/${safeName}`);
+      addServerLog(server.id, "system", `🗑️ Deleted: /home/container/${safeName}`);
       const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
       try {
         await exec(`docker exec "${containerName}" rm -rf "/home/container/${safeName}" "/app/${safeName}" 2>/dev/null || true`);
       } catch {}
-      res.json({ success: true, message: `Deleted ${safeName} from VPS container volume` });
+      res.json({ success: true, message: `Deleted ${safeName}` });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
   } else {
-    res.status(404).json({ success: false, error: "File or directory not found in container volume" });
+    res.status(404).json({ success: false, error: "File or directory not found" });
   }
 }
 
 app.delete("/api/files", handleDeleteFile);
 app.delete("/api/servers/:id/files/:filename", handleDeleteFile);
 
-// 8. Rename File or Directory in Docker Container Volume
+// 8. Rename File or Directory
 async function handleRenameFile(req: express.Request, res: express.Response) {
   const auth = await resolveAndAuthorizeServer(req, res);
   if (!auth) return;
@@ -3048,7 +3026,7 @@ async function handleRenameFile(req: express.Request, res: express.Response) {
 
   try {
     fs.renameSync(oldPath, newPath);
-    addServerLog(server.id, "system", `✏️ Renamed in container volume: ${safeOld} -> ${safeNew}`);
+    addServerLog(server.id, "system", `✏️ Renamed: ${safeOld} -> ${safeNew}`);
     const containerName = `bot_container_${server.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
     try {
       await exec(`docker exec "${containerName}" mv "/home/container/${safeOld}" "/home/container/${safeNew}" 2>/dev/null || true`);
