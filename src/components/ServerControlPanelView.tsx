@@ -470,9 +470,30 @@ export const ServerControlPanelView: React.FC<ServerControlPanelViewProps> = ({
           type: "system",
           read: false,
         });
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        onAddNotification?.({
+          id: `upload-err-${Date.now()}`,
+          title: "Upload Failed",
+          titleBn: "আপলোড ব্যর্থ হয়েছে",
+          desc: errData.error || `Server responded with status ${res.status}`,
+          descBn: errData.error || `সার্ভার এরর স্ট্যাটাস: ${res.status}`,
+          timestamp: new Date().toISOString(),
+          type: "error",
+          read: false,
+        });
       }
-    } catch {
-      // ignore
+    } catch (err: any) {
+      onAddNotification?.({
+        id: `upload-err-${Date.now()}`,
+        title: "Upload Failed",
+        titleBn: "আপলোড ব্যর্থ হয়েছে",
+        desc: err.message || "Failed to reach VPS server",
+        descBn: err.message || "VPS সার্ভারের সাথে সংযোগ করা যায়নি",
+        timestamp: new Date().toISOString(),
+        type: "error",
+        read: false,
+      });
     } finally {
       setIsUploading(false);
       e.target.value = "";

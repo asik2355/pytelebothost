@@ -2422,7 +2422,7 @@ const serverMulter = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), (req, res) => {
+app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), async (req, res) => {
   const { id } = req.params;
   const rawFiles = (req.files as Express.Multer.File[]) || (req.file ? [req.file] : []);
   if (!rawFiles || rawFiles.length === 0) {
@@ -2432,6 +2432,9 @@ app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), (req,
   // Limit to max 10 files
   const uploadedFiles = rawFiles.slice(0, 10);
   const sDir = getServerDir(id);
+  if (!fs.existsSync(sDir)) {
+    fs.mkdirSync(sDir, { recursive: true });
+  }
   const uploadedNames: string[] = [];
 
   for (const f of uploadedFiles) {
@@ -2439,18 +2442,17 @@ app.post("/api/servers/:id/files/upload", serverMulter.array("files", 10), (req,
     uploadedNames.push(uploadedName);
     const isZip = uploadedName.toLowerCase().endsWith(".zip");
 
-    addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${f.size} bytes) saved to ${f.path}`);
+    addServerLog(id, "system", `📁 File uploaded: ${uploadedName} (${f.size} bytes)`);
 
     if (isZip) {
       addServerLog(id, "system", `📦 Auto-extracting ZIP archive: ${uploadedName}...`);
-      exec(`unzip -o "${f.path}" -d "${sDir}"`, { cwd: sDir }, (unzipErr) => {
-        if (unzipErr) {
-          addServerLog(id, "stderr", `⚠️ Unzip error: ${unzipErr.message}`);
-        } else {
-          addServerLog(id, "system", `✅ ZIP contents successfully extracted.`);
-          try { fs.rmSync(f.path, { force: true }); } catch (e) {}
-        }
-      });
+      try {
+        await exec(`unzip -o "${f.path}" -d "${sDir}"`, { cwd: sDir });
+        addServerLog(id, "system", `✅ ZIP contents successfully extracted.`);
+        try { fs.rmSync(f.path, { force: true }); } catch (e) {}
+      } catch (unzipErr: any) {
+        addServerLog(id, "stderr", `⚠️ Unzip error: ${unzipErr.message}`);
+      }
     }
   }
 
